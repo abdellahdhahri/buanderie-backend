@@ -1,0 +1,448 @@
+package tn.softsys.buanderie.service.management;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerServiceRepository;
+import tn.softsys.buanderie.entity.enums.*;
+import tn.softsys.buanderie.repository.*;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * AnalytiqueDashboardService
+ *
+ * Fournit toutes les données du tableau de bord :
+ *   - KPIs globaux
+ *   - Distribution des états (pipeline)
+ *   - Stock par service
+ *   - Alertes actives (4 types)
+ *   - Machines (cycles + poids du jour)
+ *   - Agents actifs aujourd'hui
+ */
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class AnalytiqueDashboardService {
+
+    private final LingeRepository            lingeRepo;
+    private final MachineRepository          machineRepo;
+    private final CollecteRepository         collecteRepo;
+    private final CycleLavageRepository      cycleLavageRepo;
+    private final CycleSechageRepository     cycleSechageRepo;
+    private final SacInfecteRepository       sacInfecteRepo;
+    private final HistoriqueLingeRepository  historiqueRepo;
+    private final SqlServerServiceRepository sqlServiceRepo;
+
+    private static final int    SEUIL_CRITIQUE  = 3;
+    private static final int    SEUIL_ATTENTION = 8;
+    private static final int    JOURS_BLOCAGE   = 3;
+    private static final double SEUIL_FIN_VIE   = 0.90;
+    private static final int    HEURES_SAC      = 48;
+
+
+    public Map<String, Object> getDashboardComplet() {
+        var linges   = lingeRepo.findAll();
+        var machines = machineRepo.findAll();
+        var debut    = LocalDate.now().atStartOfDay();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("kpis",              buildKpis(linges, machines, debut));
+        result.put("distributionEtats", buildDistribution(linges));
+        result.put("stockParService",   buildStockParService(linges));
+        result.put("alertes",           buildAlertes(linges));
+        result.put("machines",          buildMachines(machines, debut));
+        result.put("activiteAgents",    buildAgents(debut));
+        return result;
+    }
+
+
+    public Map<String, Object> getKpis() {
+        return buildKpis(lingeRepo.findAll(), machineRepo.findAll(),
+                LocalDate.now().atStartOfDay());
+    }
+
+    private Map<String, Object> buildKpis(
+            List<tn.softsys.buanderie.entity.Linge> linges,
+            List<tn.softsys.buanderie.entity.Machine> machines,
+            LocalDateTime debutJour) {
+
+        long total   = linges.size();
+        long actifs  = linges.stream()
+                .filter(l -> l.getEtat() != EtatLinge.HORS_SERVICE).count();
+
+        Set<EtatLinge> enCircuit = Set.of(
+                EtatLinge.COLLECTE, EtatLinge.RECEPTION, EtatLinge.EN_TRI,
+                EtatLinge.EN_LAVAGE, EtatLinge.LAVE,
+                EtatLinge.EN_SECHAGE, EtatLinge.SECHE, EtatLinge.PLIE);
+
+        long circuit     = linges.stream().filter(l -> enCircuit.contains(l.getEtat())).count();
+        long disponibles = linges.stream()
+                .filter(l -> l.getEtat() == EtatLinge.LIVRE || l.getEtat() == EtatLinge.STOCKE)
+                .count();
+
+        long collectesJ = collecteRepo.findAll().stream()
+                .filter(c -> c.getDateCollecte() != null && c.getDateCollecte().isAfter(debutJour))
+                .count();
+
+        long lavagesJ = cycleLavageRepo.findAll().stream()
+                .filter(c -> c.getStatut() == StatutCycle.TERMINE
+                        && c.getDateFin() != null && c.getDateFin().isAfter(debutJour))
+                .count();
+
+        long enCours = machines.stream()
+                .filter(m -> "EN_COURS".equals(
+                        m.getEtat() != null ? m.getEtat().name() : "")).count();
+        double tauxMachines = machines.isEmpty() ? 0
+                : round((double) enCours / machines.size() * 100);
+
+        long sacsAtt = sacInfecteRepo.findAll().stream()
+                .filter(s -> s.getEtat() == EtatSac.DECLARE
+                        || s.getEtat() == EtatSac.RECEPTIONNE)
+                .count();
+
+        long procheFin = linges.stream()
+                .filter(l -> l.getDureVie() != null && l.getDureVie() > 0
+                        && (double) l.getNbLavage() / l.getDureVie() >= SEUIL_FIN_VIE)
+                .count();
+
+        long totalCollecte = linges.stream()
+                .filter(l -> l.getTypeCollecte() != null).count();
+        long infectes = linges.stream()
+                .filter(l -> l.getTypeCollecte() == TypeCollecte.INFECTE).count();
+        double tauxInf = totalCollecte > 0 ? round((double) infectes / totalCollecte * 100) : 0;
+
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("totalLinges",             total);
+        r.put("lingesActifs",            actifs);
+        r.put("lingesEnCircuit",         circuit);
+        r.put("lingesDisponibles",       disponibles);
+        r.put("collectesAujourdhui",     collectesJ);
+        r.put("lavagesAujourdhui",       lavagesJ);
+        r.put("tauxOccupationMachines",  tauxMachines);
+        r.put("sacsInfectesEnAttente",   sacsAtt);
+        r.put("lingesProcheFin",         procheFin);
+        r.put("tauxInfectionMois",       tauxInf);
+        return r;
+    }
+
+    public Map<String, Object> getDistribution() {
+        return buildDistribution(lingeRepo.findAll());
+    }
+
+    private Map<String, Object> buildDistribution(
+            List<tn.softsys.buanderie.entity.Linge> linges) {
+
+        Map<EtatLinge, Long> counts = linges.stream()
+                .collect(Collectors.groupingBy(
+                        tn.softsys.buanderie.entity.Linge::getEtat,
+                        Collectors.counting()));
+
+        long total = linges.isEmpty() ? 1 : linges.size();
+
+        Map<String, Object> r = new LinkedHashMap<>();
+        for (EtatLinge e : EtatLinge.values()) {
+            long v = counts.getOrDefault(e, 0L);
+            r.put(e.name().toLowerCase(), v);
+        }
+        // pourcentages
+        Map<String, Double> pct = new LinkedHashMap<>();
+        counts.forEach((e, v) -> pct.put(e.name(), round((double) v / total * 100)));
+        r.put("pourcentages", pct);
+        return r;
+    }
+
+
+    public List<Map<String, Object>> getStockParService() {
+        return buildStockParService(lingeRepo.findAll());
+    }
+
+    private List<Map<String, Object>> buildStockParService(
+            List<tn.softsys.buanderie.entity.Linge> linges) {
+
+        Map<Long, List<tn.softsys.buanderie.entity.Linge>> parService = linges.stream()
+                .filter(l -> l.getServiceId() != null)
+                .collect(Collectors.groupingBy(
+                        tn.softsys.buanderie.entity.Linge::getServiceId));
+
+        Set<EtatLinge> circuit = Set.of(
+                EtatLinge.COLLECTE, EtatLinge.RECEPTION, EtatLinge.EN_TRI,
+                EtatLinge.EN_LAVAGE, EtatLinge.LAVE,
+                EtatLinge.EN_SECHAGE, EtatLinge.SECHE, EtatLinge.PLIE);
+
+        return sqlServiceRepo.findAll().stream().map(svc -> {
+                    var ls = parService.getOrDefault(svc.getId(), List.of());
+
+                    long nbLivre   = ls.stream().filter(l -> l.getEtat() == EtatLinge.LIVRE).count();
+                    long nbStocke  = ls.stream().filter(l -> l.getEtat() == EtatLinge.STOCKE).count();
+                    long nbCircuit = ls.stream().filter(l -> circuit.contains(l.getEtat())).count();
+                    long nbTotal   = ls.size();
+
+                    String statut;
+                    if      (nbLivre + nbStocke <= SEUIL_CRITIQUE)  statut = "CRITIQUE";
+                    else if (nbLivre + nbStocke <= SEUIL_ATTENTION) statut = "ATTENTION";
+                    else                                              statut = "NORMAL";
+
+                    Long joursRupture = null;
+                    if (nbCircuit > 0 && nbLivre + nbStocke < SEUIL_ATTENTION && nbTotal > 0) {
+                        double usage = Math.max(1, nbTotal * 0.15);
+                        joursRupture = Math.round((nbLivre + nbStocke) / usage);
+                    }
+
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("serviceId",               svc.getId());
+                    m.put("serviceCode",             svc.getCode());
+                    m.put("serviceNom",              svc.getDescription() != null
+                            ? svc.getDescription() : svc.getCode());
+                    m.put("nbLivre",                 nbLivre);
+                    m.put("nbStocke",                nbStocke);
+                    m.put("nbEnCircuit",             nbCircuit);
+                    m.put("nbTotal",                 nbTotal);
+                    m.put("statut",                  statut);
+                    m.put("joursAvantRupturePrevue", joursRupture);
+                    return m;
+                })
+                .sorted(Comparator.comparing(m -> {
+                    String s = (String) m.get("statut");
+                    return "CRITIQUE".equals(s) ? 0 : "ATTENTION".equals(s) ? 1 : 2;
+                }))
+                .collect(Collectors.toList());
+    }
+
+    public Map<String, Object> getAlertes() {
+        return buildAlertes(lingeRepo.findAll());
+    }
+
+    private Map<String, Object> buildAlertes(
+            List<tn.softsys.buanderie.entity.Linge> linges) {
+
+        // A) Stock critique
+        List<Map<String, Object>> alertesStock = buildStockParService(linges).stream()
+                .filter(s -> !"NORMAL".equals(s.get("statut")))
+                .map(s -> alerteMap(
+                        "STOCK_" + s.get("statut"),
+                        "CRITIQUE".equals(s.get("statut")) ? "CRITICAL" : "WARNING",
+                        "Stock " + s.get("statut").toString().toLowerCase()
+                                + " → " + s.get("serviceCode"),
+                        s.get("serviceCode").toString(),
+                        s.get("nbLivre") + " en place, " + s.get("nbStocke") + " en stock"
+                                + (s.get("joursAvantRupturePrevue") != null
+                                ? " — rupture ~" + s.get("joursAvantRupturePrevue") + "j" : "")))
+                .collect(Collectors.toList());
+
+        // B) Linges bloqués
+        List<Map<String, Object>> alertesBloquees = new ArrayList<>();
+        try {
+            LocalDateTime seuil = LocalDateTime.now().minusDays(JOURS_BLOCAGE);
+
+            // 1. Récupère tous les historiques bloqués avant le seuil
+            List<tn.softsys.buanderie.entity.HistoriqueLinge> historiques =
+                    historiqueRepo.findHistoriquesBloqués(seuil);
+
+            // 2. Garder seulement le plus récent par linge
+            //    (évite les doublons si un linge a plusieurs entrées bloquées)
+            Map<Long, tn.softsys.buanderie.entity.HistoriqueLinge> parLinge =
+                    new LinkedHashMap<>();
+            for (var h : historiques) {
+                if (h.getLinge() == null) continue;
+                Long lid = h.getLinge().getId();
+                // findHistoriquesBloqués retourne DESC → premier = le plus récent
+                parLinge.putIfAbsent(lid, h);
+            }
+
+            // 3. Vérifier que le linge est encore dans cet état bloqué aujourd'hui
+            parLinge.values().stream().limit(10).forEach(h -> {
+                var linge = h.getLinge();
+                // Si l'état actuel du linge est toujours COLLECTE/RECEPTION/EN_TRI
+                if (linge.getEtat() == EtatLinge.COLLECTE
+                        || linge.getEtat() == EtatLinge.RECEPTION
+                        || linge.getEtat() == EtatLinge.EN_TRI) {
+                    alertesBloquees.add(alerteMap(
+                            "LINGE_BLOQUE", "WARNING",
+                            "Bloqué en " + linge.getEtat().name()
+                                    + " depuis +" + JOURS_BLOCAGE + "j",
+                            linge.getCodeBarre(),
+                            linge.getCategorie() != null
+                                    ? linge.getCategorie().name() : ""));
+                }
+            });
+        } catch (Exception ignored) {}
+
+        // C) Fin de vie
+        List<Map<String, Object>> alertesFinVie = linges.stream()
+                .filter(l -> l.getDureVie() != null && l.getDureVie() > 0
+                        && (double) l.getNbLavage() / l.getDureVie() >= SEUIL_FIN_VIE)
+                .limit(20)
+                .map(l -> {
+                    double usure = (double) l.getNbLavage() / l.getDureVie() * 100;
+                    return alerteMap(
+                            "FIN_VIE",
+                            usure >= 100 ? "CRITICAL" : "WARNING",
+                            (usure >= 100 ? "Hors service" : "Proche fin de vie")
+                                    + " (" + (int) usure + "%)",
+                            l.getCodeBarre(),
+                            (l.getCategorie() != null ? l.getCategorie().name() : "")
+                                    + " — " + l.getNbLavage() + "/" + l.getDureVie());
+                })
+                .collect(Collectors.toList());
+
+        // D) Sacs en attente
+        List<Map<String, Object>> alertesSacs = sacInfecteRepo.findAll().stream()
+                .filter(s -> (s.getEtat() == EtatSac.DECLARE
+                        || s.getEtat() == EtatSac.RECEPTIONNE)
+                        && s.getDateCollecte() != null
+                        && s.getDateCollecte().isBefore(
+                        LocalDateTime.now().minusHours(HEURES_SAC)))
+                .map(s -> alerteMap(
+                        "SAC_ATTENTE", "CRITICAL",
+                        "Sac infecté en attente depuis +" + HEURES_SAC + "h",
+                        s.getNumeroSac(),
+                        "État : " + s.getEtat().name()
+                                + " — " + s.getQuantiteDeclaree() + " linge(s)"))
+                .collect(Collectors.toList());
+
+        int total = alertesStock.size() + alertesBloquees.size()
+                + alertesFinVie.size() + alertesSacs.size();
+
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("stockCritique",  alertesStock);
+        r.put("lingesBloqués",  alertesBloquees);
+        r.put("finDeVie",       alertesFinVie);
+        r.put("sacsEnAttente",  alertesSacs);
+        r.put("totalAlertes",   total);
+        return r;
+    }
+
+
+    private List<Map<String, Object>> buildMachines(
+            List<tn.softsys.buanderie.entity.Machine> machines,
+            LocalDateTime debutJour) {
+
+        Map<Long, Long> cyclesLav = cycleLavageRepo.findAll().stream()
+                .filter(c -> c.getDateDebut() != null
+                        && c.getDateDebut().isAfter(debutJour)
+                        && c.getMachine() != null)
+                .collect(Collectors.groupingBy(
+                        c -> c.getMachine().getId(), Collectors.counting()));
+
+        Map<Long, Double> poidsLav = cycleLavageRepo.findAll().stream()
+                .filter(c -> c.getDateDebut() != null
+                        && c.getDateDebut().isAfter(debutJour)
+                        && c.getMachine() != null && c.getPoidsCharge() != null)
+                .collect(Collectors.groupingBy(
+                        c -> c.getMachine().getId(),
+                        Collectors.summingDouble(
+                                tn.softsys.buanderie.entity.CycleLavage::getPoidsCharge)));
+
+        Map<Long, Long> cyclesSec = cycleSechageRepo.findAll().stream()
+                .filter(c -> c.getDateDebut() != null
+                        && c.getDateDebut().isAfter(debutJour)
+                        && c.getMachine() != null)
+                .collect(Collectors.groupingBy(
+                        c -> c.getMachine().getId(), Collectors.counting()));
+
+        Map<Long, Double> poidsSec = cycleSechageRepo.findAll().stream()
+                .filter(c -> c.getDateDebut() != null
+                        && c.getDateDebut().isAfter(debutJour)
+                        && c.getMachine() != null && c.getPoidsCharge() != null)
+                .collect(Collectors.groupingBy(
+                        c -> c.getMachine().getId(),
+                        Collectors.summingDouble(
+                                tn.softsys.buanderie.entity.CycleSechage::getPoidsCharge)));
+
+        return machines.stream().map(m -> {
+                    long   cycles = cyclesLav.getOrDefault(m.getId(), 0L)
+                            + cyclesSec.getOrDefault(m.getId(), 0L);
+                    double poids  = poidsLav.getOrDefault(m.getId(), 0.0)
+                            + poidsSec.getOrDefault(m.getId(), 0.0);
+
+                    Map<String, Object> mp = new LinkedHashMap<>();
+                    mp.put("id",                     m.getId());
+                    mp.put("code",                   m.getCode());
+                    mp.put("type",                   m.getType() != null ? m.getType().name() : null);
+                    mp.put("etat",                   m.getEtat() != null ? m.getEtat().name() : null);
+                    mp.put("capaciteKg",             m.getCapaciteKg());
+                    mp.put("cyclesAujourdhui",       (int) cycles);
+                    mp.put("poidsTraiteAujourdhui",  round(poids));
+                    return mp;
+                })
+                .sorted(Comparator.comparing(m -> {
+                    String e = (String) m.get("etat");
+                    return "EN_COURS".equals(e) ? 0 : "DISPONIBLE".equals(e) ? 1 : 2;
+                }))
+                .collect(Collectors.toList());
+    }
+
+
+    private List<Map<String, Object>> buildAgents(LocalDateTime debutJour) {
+        try {
+            return historiqueRepo.activiteAgentsAujourdhui(debutJour)
+                    .stream()
+                    .map(row -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("matricule",        row[0]);
+                        m.put("nomComplet",       row[1] + " " + row[2]);
+                        m.put("nbOperations",     ((Number) row[3]).longValue());
+                        m.put("derniereOperation",row[4] != null ? row[4].toString() : "");
+                        m.put("etapeActive",      inferEtape(row[4] != null
+                                ? row[4].toString() : ""));
+                        return m;
+                    })
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // SCHEDULERS
+    // ─────────────────────────────────────────────────────────────────────
+    @Scheduled(fixedDelay = 300_000)
+    public void verifierAlertesCritiques() {
+        try {
+            Map<String, Object> alertes = buildAlertes(lingeRepo.findAll());
+            int total = (int) alertes.get("totalAlertes");
+            if (total > 0) {
+                System.out.printf("[DASHBOARD] %d alerte(s) active(s)%n", total);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // UTILITAIRES PRIVÉS
+    // ─────────────────────────────────────────────────────────────────────
+    private Map<String, Object> alerteMap(String type, String niveau,
+                                          String message, String ref, String detail) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("type",    type);
+        m.put("niveau",  niveau);
+        m.put("message", message);
+        m.put("reference", ref);
+        m.put("detail",  detail);
+        return m;
+    }
+
+    private double round(double v) {
+        return Math.round(v * 10.0) / 10.0;
+    }
+
+    private String inferEtape(String typeOp) {
+        return switch (typeOp) {
+            case "COLLECTE"           -> "Collecte";
+            case "RECEPTION_BAC"      -> "Réception";
+            case "TRI"                -> "Tri";
+            case "DEMARRAGE_LAVAGE",
+                 "FIN_LAVAGE"         -> "Lavage";
+            case "DEMARRAGE_SECHAGE",
+                 "FIN_SECHAGE"        -> "Séchage";
+            case "PLIAGE"             -> "Pliage";
+            case "MISE_EN_STOCKAGE"   -> "Stockage";
+            case "LIVRAISON"          -> "Distribution";
+            default                   -> typeOp;
+        };
+    }
+}

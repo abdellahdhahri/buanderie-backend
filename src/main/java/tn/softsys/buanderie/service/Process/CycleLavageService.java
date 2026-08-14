@@ -1,0 +1,256 @@
+package tn.softsys.buanderie.service.Process;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tn.softsys.buanderie.dto.Lot.LotScanResponse;
+import tn.softsys.buanderie.entity.*;
+import tn.softsys.buanderie.entity.enums.*;
+import tn.softsys.buanderie.exception.ResourceNotFoundException;
+import tn.softsys.buanderie.repository.*;
+import tn.softsys.buanderie.service.Reporting.NotificationService;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class CycleLavageService {
+
+    private final CycleLavageRepository cycleRepo;
+    private final LotRepository lotRepo;
+    private final MachineRepository machineRepo;
+    private final ProgrammeLavageRepository programmeRepo;
+    private final CycleLavageItemRepository itemRepo;
+    private final AgentRepository agentRepository;
+    private final LingeRepository lingeRepository;
+    private final HistoriqueLingeRepository historiqueLingeRepository;
+    private final NotificationService notificationService;
+    public LotScanResponse scanLot(String codeLot) {
+        Lot lot = lotRepo.findByCodeLot(codeLot)
+                .orElseThrow(() -> new ResourceNotFoundException("Lot", "code", codeLot));
+        ProgrammeLavage programme = suggestProgramme(lot.getCategorie());
+        return LotScanResponse.builder()
+                .codeLot(lot.getCodeLot())
+                .categorie(lot.getCategorie())
+                //.poidsRestant(lot.getPoidsRestant())
+                //.quantiteRestante(lot.getQuantiteRestante())
+                .programmeRecommande(programme.getNom())
+                .temperature(programme.getTemperatureCelsius())
+                .description(programme.getDescription())
+                .vitesse(programme.getVitesseEssorageRpm())
+                .duree(programme.getDureeMinutes())
+                .build();
+    }
+
+
+    private ProgrammeLavage suggestProgramme(CategLinge categorie) {
+        return programmeRepo.findByCategoriesContaining(categorie)
+                .orElseThrow(() ->
+                        new RuntimeException("Programme introuvable"));
+    }
+
+
+
+    @Transactional
+    public CycleLavage startCycle(String codeMachine,
+                                  String codeLot,
+                                  String matriculeAgent,
+                                  Double poidsCharge) {
+        Agent agent = agentRepository.findByMatricule(matriculeAgent)
+                .orElseThrow(() -> new ResourceNotFoundException("AGENT", "matriculeAgent", matriculeAgent));
+
+        Machine machine = machineRepo.findByCode(codeMachine);
+               //.orElseThrow(() -> new ResourceNotFoundException("Machine", "code", codeMachine));
+        Lot lot = lotRepo.findByCodeLot(codeLot)
+                .orElseThrow(() -> new ResourceNotFoundException("Lot", "code", codeLot));
+
+        //  controle capacité machine
+        if (poidsCharge > machine.getCapaciteKg()) {
+            throw new RuntimeException("Capacité machine insuffisante");
+        }
+        if(machine.getEtat() != Machine.EtatMachine.DISPONIBLE){
+            throw new RuntimeException("Machine indisponible");
+
+        }
+
+            ProgrammeLavage programme = suggestProgramme(lot.getCategorie());
+            System.out.println("Programme = " + programme);
+        CycleLavage cycle = CycleLavage.builder()
+                .machine(machine)
+                .programmeLavage(programme)
+                .agent(agent)
+                .poidsCharge(poidsCharge)
+                .dateDebut(LocalDateTime.now())
+                .statut(StatutCycle.EN_COURS)
+                .build();
+        cycle = cycleRepo.save(cycle);
+        List<Linge> linges = lingeRepository.findByLot_CodeLot(codeLot);
+
+        for (Linge linge : linges) {
+            linge.setEtat(EtatLinge.EN_LAVAGE);
+          //  historiserLavage(linge, agent, EtatLinge.EN_LAVAGE);
+            System.out.println("etat du linge"+linge.getEtat());
+            EtatLinge ancienEtat = linge.getEtat();
+            linge.setDureVie(linge.getDureVie()-1);
+            if (linge.getNbLavage() >= linge.getDureVie()) {
+
+                notificationService.notifierFinDeVie(linge);
+
+            }
+            HistoriqueLinge historique = HistoriqueLinge.builder()
+                    .linge(linge)
+                    .etatAvant(ancienEtat)
+                    .etatApres(EtatLinge.EN_LAVAGE)
+                    .agent(agent)
+                    .typeOperation(TypeOperation.DEMARRAGE_LAVAGE)
+                    .dateOperation(LocalDateTime.now())
+                    .observations("Passage en lavage")
+                    .dateOperation(LocalDateTime.now())
+                    //.collecte(linge.getc())
+                    // .sacInfecte(linge.getSacInfecte())
+                    .build();
+            historiqueLingeRepository.save(historique);
+        }
+        mettreLingesEnLavage(codeLot);
+        addLotToCycleInternal(cycle, lot, poidsCharge);
+        //viderLot(lot);
+        machine.setEtat(Machine.EtatMachine.EN_COURS);
+        //lot.setEtat(EtatLot.EN_LAVAGE);
+        lot.setPoidsActuel(0.0);
+        return cycle;
+    }
+    public CycleLavage addLotToCycle(Long cycleId,
+                                     String codeLot,
+                                     Double poidsCharge) {
+        CycleLavage cycle = cycleRepo.findById(cycleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cycle non trouvé"));
+        Lot lot = lotRepo.findByCodeLot(codeLot)
+                .orElseThrow(() -> new ResourceNotFoundException("Lot", "code", codeLot));
+        double nouveauPoids = cycle.getPoidsCharge() + poidsCharge;
+        if (nouveauPoids > cycle.getMachine().getCapaciteKg()) {
+            throw new RuntimeException("Capacité dépassée");
+        }
+        List<Linge> linges  = lingeRepository.findByLot_CodeLot(codeLot);
+        //mettre a jours l'etat des  linges
+        mettreLingesEnLavage(codeLot);
+
+        cycle.setPoidsCharge(nouveauPoids);
+        addLotToCycleInternal(cycle, lot, poidsCharge);
+        return cycleRepo.save(cycle);
+    }
+    private void addLotToCycleInternal(CycleLavage cycle,
+                                       Lot lot,
+                                       Double poidsCharge) {
+        CycleLavageItem item = CycleLavageItem.builder()
+                .cycleLavage(cycle)
+                .typeSource(TypeSource.LOT_TRI)
+                .sourceId(lot.getId())
+                .poidsCharge(poidsCharge)
+                .quantiteChargee(null)
+                .build();
+        itemRepo.save(item);
+        //  mise à jour lot (consommation partielle)
+        //lot.setPoidsRestant(lot.getPoidsRestant() - poidsCharge);
+        lotRepo.save(lot);
+    }
+    @Transactional
+    public CycleLavage finishCycle(Long cycleId) {
+
+        CycleLavage cycle = cycleRepo.findById(cycleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cycle non trouvé"));
+
+        cycle.setStatut(StatutCycle.TERMINE);
+        cycle.setDateFin(LocalDateTime.now());
+
+        Machine machine = cycle.getMachine();
+        machine.setEtat(Machine.EtatMachine.DISPONIBLE);
+
+        List<CycleLavageItem> items =
+                itemRepo.findByCycleLavage(cycle);
+
+        for (CycleLavageItem item : items) {
+
+            Lot lot = lotRepo.findById(item.getSourceId())
+                    .orElseThrow(() ->
+                            new ResourceNotFoundException("Lot introuvable"));
+
+            List<Linge> linges =
+                    lingeRepository.findByLot_CodeLot(lot.getCodeLot());
+
+            for (Linge linge : linges) {
+
+                EtatLinge ancienEtat = linge.getEtat();
+
+                linge.setEtat(EtatLinge.LAVE);
+                linge.setNbLavage(linge.getNbLavage()+ 1);
+
+
+               // linge.setLot(null);
+
+                historiqueLingeRepository.save(
+                        HistoriqueLinge.builder()
+                                .linge(linge)
+                                .etatAvant(ancienEtat)
+                                .etatApres(EtatLinge.LAVE)
+                                .agent(cycle.getAgent())
+                                .typeOperation(TypeOperation.FIN_LAVAGE)
+                                .dateOperation(LocalDateTime.now())
+                                .observations("Fin du cycle de lavage")
+                                .build()
+                );
+            }
+
+            lingeRepository.saveAll(linges);
+
+            lot.setPoidsActuel(0.0);
+            lot.setEtat(EtatLot.EN_TRI);
+
+            lotRepo.save(lot);
+        }
+
+        machineRepo.save(machine);
+
+        return cycleRepo.save(cycle);
+    }
+    //METHODE POUR METTRE A JOURS LES ETATS ES LINGES EN LAVAGE
+    private void mettreLingesEnLavage(String codeLot) {
+        List<Linge> linges = lingeRepository.findByLot_CodeLot(codeLot);
+
+        for (Linge linge : linges) {
+            linge.setEtat(EtatLinge.EN_LAVAGE);
+        }
+        lingeRepository.saveAll(linges);
+    }
+    private void historiserLavage(Linge linge, Agent agent, EtatLinge nouvelEtat) {
+        HistoriqueLinge historique = HistoriqueLinge.builder()
+                .linge(linge)
+                .etatAvant(linge.getEtat())
+                .etatApres(nouvelEtat)
+                .agent(agent)
+                .typeOperation(TypeOperation.DEMARRAGE_LAVAGE)
+                .dateOperation(LocalDateTime.now())
+                .observations("Passage en lavage")
+                .dateOperation(LocalDateTime.now())
+                //.collecte(linge.getc())
+               // .sacInfecte(linge.getSacInfecte())
+                .build();
+        historiqueLingeRepository.save(historique);
+        linge.setEtat(nouvelEtat);
+        lingeRepository.save(linge);
+    }
+
+    //methode pour vider le lots mis en lavage
+    @Transactional
+    public void viderLot(Lot lot) {
+        List<Linge> linges =
+                lingeRepository.findByLot_CodeLot(lot.getCodeLot());
+        for(Linge linge : linges) {
+            linge.setLot(null);
+            lingeRepository.save(linge);
+        }
+        lot.setPoidsActuel(0.0);
+        lot.setEtat(EtatLot.EN_LAVAGE);
+        lotRepo.save(lot);
+    }
+}
