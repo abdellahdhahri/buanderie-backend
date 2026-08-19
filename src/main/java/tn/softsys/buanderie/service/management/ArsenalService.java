@@ -8,6 +8,7 @@ import tn.softsys.buanderie.repository.ArsenalRepository;
 import tn.softsys.buanderie.repository.LingeRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -60,5 +61,19 @@ public class ArsenalService {
 
 
         return arsenalRepository.save(arsenal);
+    }
+    public void delete(Long id) {
+
+        Arsenal arsenal = arsenalRepository.findById(id)
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "Arsenal introuvable avec l'id : " + id
+                        )
+                );
+
+        arsenalRepository.delete(arsenal);
+    }
+    public Optional<Arsenal> getBycode(String code){
+        return arsenalRepository.findByCode(code);
     }
 }

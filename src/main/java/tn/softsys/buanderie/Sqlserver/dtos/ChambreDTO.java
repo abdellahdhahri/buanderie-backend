@@ -11,4 +11,5 @@ public class ChambreDTO {
     private Long id;
     private String code;
     private Long serviceId;
+    private String codeBarre;
 }

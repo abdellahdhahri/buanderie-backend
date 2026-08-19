@@ -127,6 +127,8 @@ public class DistributionService {
         linge.setPorteurNom(null);
         linge.setEtat(EtatLinge.LIVRE);
         linge.setStatutCollecte(null);
+        linge.setEmplacement(null);
+
         lingeRepo.save(linge);
 
         historiqueRepo.save(HistoriqueLinge.builder()
@@ -213,6 +215,8 @@ public class DistributionService {
         linge.setPorteurNom(null);
         linge.setEtat(EtatLinge.LIVRE);
         linge.setStatutCollecte(null);
+        linge.setEmplacement(null);
+
         lingeRepo.save(linge);
 
         historiqueRepo.save(HistoriqueLinge.builder()
@@ -296,6 +300,7 @@ public class DistributionService {
         linge.setChambreIdSqlServer(null);
         linge.setEtat(EtatLinge.LIVRE);
         linge.setStatutCollecte(null);
+        linge.setEmplacement(null);
         lingeRepo.save(linge);
 
         historiqueRepo.save(HistoriqueLinge.builder()

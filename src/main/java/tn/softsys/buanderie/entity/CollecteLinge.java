@@ -39,7 +39,6 @@ public class CollecteLinge {
     @Column(name = "type_collecte", length = 20)
     private TypeCollecte typeCollecte;
 
-    /** Numéro du sac infecté d'origine (pour les linges infectés) */
     @Column(name = "numero_sac_infecte", length = 30)
     private String numeroSacInfecte;
 

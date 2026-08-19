@@ -150,13 +150,14 @@ public class CollecteServiceService {
         l.setEtat(EtatLinge.COLLECTE);
         l.setStatutCollecte(StatutCollecteLinge.BLANC);
         l.setTypeCollecte(TypeCollecte.BLANC);
-        l.setServiceId(null);
+//        l.setServiceId(null);
         lingeRepo.save(l);
 
         collecteLingeRepo.save(CollecteLinge.builder()
                 .collecte(c).linge(l)
                 .typeCollecte(TypeCollecte.BLANC)
                 .dateScan(LocalDateTime.now())
+
                 .build());
 
         historiqueRepo.save(HistoriqueLinge.builder()
@@ -272,7 +273,7 @@ public class CollecteServiceService {
         c.setNbPropres((int) p);
         c.setNbInfectésPrésumés((int) (i + qteInfectes));
         c.setNbManquants((int) m);
-        c.setEtatCollecte(EtatCollecte.verifie);
+        c.setEtatCollecte(EtatCollecte.EN_TRAITEMENT);
         c.setDateFin(LocalDateTime.now());
         collecteRepo.save(c);
 

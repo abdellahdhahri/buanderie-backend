@@ -6,10 +6,13 @@ import org.springframework.web.bind.annotation.*;
 import tn.softsys.buanderie.dto.Lot.LotScanResponse;
 import tn.softsys.buanderie.entity.CycleLavage;
 import tn.softsys.buanderie.entity.CycleLavageItem;
+import tn.softsys.buanderie.entity.enums.StatutCycle;
 import tn.softsys.buanderie.repository.CycleLavageItemRepository;
+import tn.softsys.buanderie.repository.CycleLavageRepository;
 import tn.softsys.buanderie.service.Process.CycleLavageService;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/lavage")
@@ -18,7 +21,27 @@ public class CycleLavageController {
 
     private final CycleLavageService cycleService;
     private final CycleLavageItemRepository cycleLavageItemRepository;
+    private final CycleLavageRepository cycleRepo;
+    @GetMapping("/cycles")
+    public ResponseEntity<List<CycleLavage>> getAllCycles() {
+        return ResponseEntity.ok(cycleService.getAllCycles());
+    }
+    @GetMapping("/cycles/{id}")
+    public ResponseEntity<CycleLavage> getCycleById(@PathVariable Long id) {
+        return ResponseEntity.ok(cycleService.getCycleById(id));
+    }
 
+    @GetMapping("/cycles/{id}/linges")
+    public ResponseEntity<List<Map<String, Object>>> getLingeDuCycle(
+            @PathVariable Long id) {
+        return ResponseEntity.ok(cycleService.getLingeDuCycle(id));
+    }
+
+    @GetMapping("/cycles/statut/{statut}")
+    public ResponseEntity<List<CycleLavage>> getByStatut(
+            @PathVariable StatutCycle statut) {
+        return ResponseEntity.ok(cycleRepo.findByStatut(statut));
+    }
     @GetMapping("/scan-lot/{codeLot}")
     public ResponseEntity<LotScanResponse> scanLot(@PathVariable String codeLot) {
 

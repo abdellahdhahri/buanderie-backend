@@ -7,5 +7,8 @@ public enum TypeReclamation {
     TACHE_PERSISTANTE,
     COUTURE_ABIMEE,
     BOUTON_MANQUANT,
-    A_REFORMER
+    A_REFORMER,
+    MAL_LAVE
+
+
 }

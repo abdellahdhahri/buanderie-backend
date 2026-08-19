@@ -38,12 +38,12 @@ public class SqlServerChambreService {
         return mapToDTO(chambre);
     }
 
-    // on commence tt d'abord par les deux premier flux chambre +lit et services
 
     private ChambreDTO mapToDTO(Chambre chambre) {
         return ChambreDTO.builder()
                 .id(chambre.getId())
                 .code(chambre.getCode())
+                .codeBarre(chambre.getCodeBarre())
                 .serviceId(chambre.getService() != null ? chambre.getService().getId() : null)
                 .build();
     }

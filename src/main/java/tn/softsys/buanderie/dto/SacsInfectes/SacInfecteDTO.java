@@ -40,7 +40,8 @@ public class SacInfecteDTO {
     private List<ItemDTO> items;
     private List<String> codesLingesPropres;
     private int nombreLingesAffectes;
-
+    private Long   cycleLavageId;
+    private String machineCode;
     @Data
     @Builder
     public static class ItemDTO {

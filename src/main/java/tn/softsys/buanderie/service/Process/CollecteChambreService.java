@@ -116,7 +116,7 @@ public class CollecteChambreService {
              p=cnt(it,TypeCollecte.PROPRE_EN_PLACE),m=cnt(it,TypeCollecte.MANQUANT);
         c.setNbScannésBlanc((int)b); c.setNbPropres((int)p);
         c.setNbInfectésPrésumés((int)i); c.setNbManquants((int)m);
-        c.setEtatCollecte(EtatCollecte.verifie); c.setDateFin(LocalDateTime.now()); collecteRepo.save(c);
+        c.setEtatCollecte(EtatCollecte.EN_TRAITEMENT); c.setDateFin(LocalDateTime.now()); collecteRepo.save(c);
         return Map.of("collecteId",collecteId,"codeChambre",s(c.getCodeChambre()),
                 "nbBlancs",b,"nbInfectes",i,"nbPropres",p,"nbManquants",m);
     }

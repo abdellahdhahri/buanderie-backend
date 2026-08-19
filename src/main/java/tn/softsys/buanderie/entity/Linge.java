@@ -56,7 +56,7 @@ public class Linge {
     @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
-    private EtatLinge etat = EtatLinge.PROPRE;
+    private EtatLinge etat = EtatLinge.STOCKE;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "bac_id")

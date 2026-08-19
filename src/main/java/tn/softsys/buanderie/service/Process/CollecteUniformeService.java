@@ -90,7 +90,7 @@ public class CollecteUniformeService {
         c.setNbPropres((int) p);
         c.setNbInfectésPrésumés((int) i);
         c.setNbManquants((int) m);
-        c.setEtatCollecte(EtatCollecte.verifie);
+        c.setEtatCollecte(EtatCollecte.EN_TRAITEMENT);
         c.setDateFin(LocalDateTime.now());
         collecteRepo.save(c);
         return Map.of("collecteId", collecteId, "nbBlancs", b, "nbInfectes", i, "nbPropres", p, "nbManquants", m);

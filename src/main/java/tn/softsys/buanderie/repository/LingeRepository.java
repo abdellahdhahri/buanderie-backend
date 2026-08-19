@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import tn.softsys.buanderie.entity.Linge;
+import tn.softsys.buanderie.entity.enums.CategLinge;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
 
 import java.util.List;
@@ -25,7 +26,9 @@ public interface LingeRepository extends JpaRepository<Linge, Long>, JpaSpecific
     boolean         existsByRfidTag(String codeRfid);
     List<Linge>     findByRfidTagIn(List<String> rfidTags);
     List<Linge> findByEmplacement_Id(Long arsenalId);
+    List<Linge> findByLot_Id(Long lotId);
 
+    List<Linge> findByLot_IdAndEtat(Long lotId, EtatLinge etat);
 
     @Query("SELECT l FROM Linge l WHERE l.codeBarre = :code OR l.rfidTag = :code")
     Optional<Linge> findByBarcodeOrRfid(@Param("code") String code);
@@ -44,4 +47,9 @@ public interface LingeRepository extends JpaRepository<Linge, Long>, JpaSpecific
 
     // ── Distribution : linges STOCKE d'un service ───────────────────────────
     List<Linge> findByServiceIdAndEtatOrderByCategorie(Long serviceId, EtatLinge etat);
+    long countByServiceIdAndCategorieAndEtat(
+            Long serviceId,
+            CategLinge categorie,
+            EtatLinge etat
+    );
 }

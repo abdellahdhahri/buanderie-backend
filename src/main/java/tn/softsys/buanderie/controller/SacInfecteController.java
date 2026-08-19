@@ -35,8 +35,11 @@ public class SacInfecteController {
 
     @PutMapping("/laver")
     public ResponseEntity<SacInfecteDTO> mettreEnLavage(
-            @RequestParam String numeroSac, @RequestParam String matricule) {
-        return ResponseEntity.ok(sacInfecteService.mettreEnLavage(numeroSac, matricule));
+            @RequestParam String numeroSac,
+            @RequestParam String matricule,
+            @RequestParam String codeMachine) {
+        return ResponseEntity.ok(
+                sacInfecteService.mettreEnLavage(numeroSac, matricule, codeMachine));
     }
 
     @PostMapping("/verifier")

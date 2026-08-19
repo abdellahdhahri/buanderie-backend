@@ -40,7 +40,7 @@ public class PliageService {
 
         Linge linge = rechercherLinge(request.getCodeOuTag());
 
-        if (linge.getEtat() != EtatLinge.LAVE) {
+        if (linge.getEtat() != EtatLinge.SECHE) {
             throw new BusinessException(
                     "Le linge doit être en état SECHE.");
         }

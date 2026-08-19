@@ -112,7 +112,6 @@ public class CycleSechageService {
                 .statut(StatutCycle.EN_COURS)
                 .build());
 
-        // Linges LAVE → EN_SECHAGE
         for (Linge linge : linges) {
             EtatLinge ancien = linge.getEtat();
             linge.setEtat(EtatLinge.EN_SECHAGE);

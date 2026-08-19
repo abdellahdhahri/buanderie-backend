@@ -93,6 +93,10 @@ public class SacInfecte {
     @JoinColumn(name = "agent_affectation_id",nullable = true)
     private Agent agentAffectation;
 
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cycle_lavage_id")
+    private CycleLavage cycleLavage;
     @PrePersist
     protected void onCreate() {
         if (this.dateCollecte == null) this.dateCollecte = LocalDateTime.now();

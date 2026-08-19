@@ -29,5 +29,9 @@ public interface CollecteRepository extends JpaRepository<Collecte, Long> {
     @Query("SELECT c FROM Collecte c WHERE c.dateCollecte BETWEEN :debut AND :fin ORDER BY c.dateCollecte DESC")
     List<Collecte> findByPeriode(@Param("debut") LocalDateTime debut,
                                  @Param("fin")   LocalDateTime fin);
+    Optional<Collecte> findFirstByAgent_MatriculeAndEtatCollecteNotOrderByDateCollecteDesc(
+            String matricule,
+            EtatCollecte etatCollecte
+    );
 
 }

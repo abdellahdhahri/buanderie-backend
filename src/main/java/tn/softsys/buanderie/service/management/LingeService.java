@@ -10,6 +10,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
+import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
+import tn.softsys.buanderie.Sqlserver.sqlServerServices.PersonnelService;
 import tn.softsys.buanderie.dto.Linge.AssocierRfidRequest;
 import tn.softsys.buanderie.dto.Historique.HistoriqueLingeDto;
 import tn.softsys.buanderie.dto.LingeDTO;
@@ -24,6 +27,7 @@ import tn.softsys.buanderie.repository.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -40,6 +44,8 @@ public class LingeService {
     private final ServiceRepository serviceRepository;
     private final LitRepository litRepository;
     private final  LotRepository lotRepository;
+    private final PersonnelService personnelService;
+    private final SqlServerPersonnelRepository personnelRepository;
 
     public Page<LingeDTO> getLingesPaged(int page, int size, String categorie, String etatStr, Long serviceId, String search) {
         Pageable pageable = PageRequest.of(page, size);
@@ -57,7 +63,9 @@ public class LingeService {
                 }
             }
             if (serviceId != null) {
-                predicates.add(cb.equal(root.get("service").get("id"), serviceId));
+                predicates.add(
+                        cb.equal(root.get("serviceId"), serviceId)
+                );
             }
             if (search != null && !search.trim().isEmpty()) {
                 String searchPattern = "%" + search.trim().toLowerCase() + "%";
@@ -150,9 +158,11 @@ public class LingeService {
         linge.setCodeBarre(dto.getCodebarre());
         linge.setRfidTag(dto.getRfidTag());
         linge.setCategorie(CategLinge.valueOf(dto.getCategorie()));
-        linge.setEtat(EtatLinge.PROPRE);
+        linge.setEtat(EtatLinge.STOCKE);
         linge.setPoids(dto.getPoids());
         linge.setServiceId(dto.getServiceId());
+        linge.setDureVie(dto.getDurevie());
+
 
         // Récupérer et assigner le service si serviceId est fourni
 //        if (dto.getServiceId() != null) {
@@ -161,6 +171,19 @@ public class LingeService {
 //            linge.setServiceId(service);
 //        }
 
+        if (dto.getPorteurId() != null) {
+            linge.setPorteurId(dto.getPorteurId());
+
+            // Récupérer le nom du porteur depuis SQL Server
+            try {
+                Optional<Personnel> porteur = personnelRepository.findById(dto.getPorteurId());
+                if (porteur != null) {
+                    linge.setPorteurNom(porteur.get().getPrenom() + " " + porteur.get().getNom());
+                }
+            } catch (Exception e) {
+                System.err.println("Erreur récupération porteur SQL Server: " + e.getMessage());
+            }
+        }
 
 
 
@@ -182,7 +205,7 @@ public class LingeService {
         historiqueLingeRepository.save(h);
         return linge;
     }
-    //Methode pour affecter une linge a un bac 
+    //Methode pour affecter une linge a un bac
     public Linge affecterAuBac(String codeBarre, Long bacId) {
 
         Linge linge = lingeRepository.findByCodeBarre(codeBarre)
@@ -208,18 +231,33 @@ public class LingeService {
     private LingeDTO toDTO(Linge linge) {
         return LingeDTO.builder()
                 .id(linge.getId())
-                .categorie(linge.getCategorie().name())
-                .chambre_id(linge.getChambreIdSqlServer() )
+                .categorie(
+                        linge.getCategorie() != null
+                                ? linge.getCategorie().name()
+                                : null
+                )
+                .chambre_id(linge.getChambreIdSqlServer())
                 .poids(linge.getPoids())
                 .etat(linge.getEtat())
                 .rfidTag(linge.getRfidTag())
                 .codebarre(linge.getCodeBarre())
+
                 .programmeLavage(linge.getProgrammeLavage())
                 .programmeSechage(linge.getProgrammeSechage())
+
                 .serviceId(linge.getServiceId())
-//                .serviceNom(linge.getService() != null ? linge.getService().getNom() : null)
-//                .serviceCode(linge.getService() != null ? linge.getService().getNom() : null)
-                .bacId(linge.getBac() != null ? linge.getBac().getId() : null)
+
+                .bacId(
+                        linge.getBac() != null
+                                ? linge.getBac().getId()
+                                : null
+                )
+
+                .porteurId(linge.getPorteurId())
+                .porteurNom(linge.getPorteurNom())
+
+                .durevie(linge.getDureVie())
+
                 .build();
     }
 
@@ -281,6 +319,62 @@ public class LingeService {
         lingeRepository.save(linge);
 
         return linge;
+    }
+
+
+    @Transactional
+    public Linge update(Long id, LingeDTO dto) {
+        Linge linge = findById(id);
+
+        if (dto.getCategorie() != null) {
+            try {
+                linge.setCategorie(CategLinge.valueOf(dto.getCategorie()));
+            } catch (IllegalArgumentException e) {
+                throw new BusinessException("Catégorie invalide: " + dto.getCategorie());
+            }
+        }
+
+        if (dto.getPoids() != null) {
+            linge.setPoids(dto.getPoids());
+        }
+
+        if (dto.getEtat() != null) {
+            linge.setEtat(dto.getEtat());
+        }
+
+        if (dto.getServiceId() != null) {
+            linge.setServiceId(dto.getServiceId());
+        }
+
+        if (dto.getDurevie() != null) {
+            linge.setDureVie(dto.getDurevie());
+        }
+
+        if (dto.getPorteurId() != null) {
+            linge.setPorteurId(dto.getPorteurId());
+
+            try {
+                Personnel porteur = personnelRepository.findById(dto.getPorteurId()).orElse(null);
+                if (porteur != null) {
+                    linge.setPorteurNom(porteur.getPrenom() + " " + porteur.getNom());
+                } else {
+                    linge.setPorteurNom(null);
+                }
+            } catch (Exception e) {
+                System.err.println("Erreur récupération porteur: " + e.getMessage());
+                linge.setPorteurNom(null);
+            }
+        } else {
+            linge.setPorteurId(null);
+            linge.setPorteurNom(null);
+        }
+
+        if (dto.getRfidTag() != null) {
+            linge.setRfidTag(dto.getRfidTag());
+        }
+
+
+        return lingeRepository.save(linge);
     }
 
 }

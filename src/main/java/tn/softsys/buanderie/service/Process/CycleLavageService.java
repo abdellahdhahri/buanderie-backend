@@ -12,6 +12,7 @@ import tn.softsys.buanderie.service.Reporting.NotificationService;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -252,5 +253,41 @@ public class CycleLavageService {
         lot.setPoidsActuel(0.0);
         lot.setEtat(EtatLot.EN_LAVAGE);
         lotRepo.save(lot);
+    }
+    public List<CycleLavage> getAllCycles() {
+        return cycleRepo.findAllByOrderByDateDebutDesc();
+    }
+
+    public CycleLavage getCycleById(Long id) {
+        return cycleRepo.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("CycleLavage", "id", id));
+    }
+
+    public List<Map<String, Object>> getLingeDuCycle(Long cycleId) {
+        CycleLavage cycle = getCycleById(cycleId);
+        List<CycleLavageItem> items = itemRepo.findByCycleLavage_Id(cycleId);
+
+        List<Map<String, Object>> result = new java.util.ArrayList<>();
+
+        for (CycleLavageItem item : items) {
+            if (item.getSourceId() == null) continue;
+
+            // Récupérer les linges via la relation Linge.lot
+            List<Linge> linges = lingeRepository.findByLot_Id(item.getSourceId());
+
+            for (Linge l : linges) {
+                Map<String, Object> m = new java.util.LinkedHashMap<>();
+                m.put("lingeId",   l.getId());
+                m.put("codeBarre", l.getCodeBarre());
+                m.put("rfidTag",   l.getRfidTag());
+                m.put("categorie", l.getCategorie() != null ? l.getCategorie().name() : null);
+                m.put("etat",      l.getEtat() != null ? l.getEtat().name() : null);
+                m.put("poids",     l.getPoids());
+                m.put("lotId",     item.getSourceId());
+                m.put("itemId",    item.getId());
+                result.add(m);
+            }
+        }
+        return result;
     }
 }

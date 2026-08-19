@@ -239,11 +239,11 @@ public class AnalytiqueDashboardService {
         try {
             LocalDateTime seuil = LocalDateTime.now().minusDays(JOURS_BLOCAGE);
 
-            // 1. Récupère tous les historiques bloqués avant le seuil
+            //  Récupère tous les historiques bloqués avant le seuil
             List<tn.softsys.buanderie.entity.HistoriqueLinge> historiques =
                     historiqueRepo.findHistoriquesBloqués(seuil);
 
-            // 2. Garder seulement le plus récent par linge
+            //  Garder seulement le plus récent par linge
             //    (évite les doublons si un linge a plusieurs entrées bloquées)
             Map<Long, tn.softsys.buanderie.entity.HistoriqueLinge> parLinge =
                     new LinkedHashMap<>();
@@ -254,7 +254,7 @@ public class AnalytiqueDashboardService {
                 parLinge.putIfAbsent(lid, h);
             }
 
-            // 3. Vérifier que le linge est encore dans cet état bloqué aujourd'hui
+            //  Vérifier que le linge est encore dans cet état bloqué aujourd'hui
             parLinge.values().stream().limit(10).forEach(h -> {
                 var linge = h.getLinge();
                 // Si l'état actuel du linge est toujours COLLECTE/RECEPTION/EN_TRI
@@ -272,7 +272,7 @@ public class AnalytiqueDashboardService {
             });
         } catch (Exception ignored) {}
 
-        // C) Fin de vie
+        //  Fin de vie
         List<Map<String, Object>> alertesFinVie = linges.stream()
                 .filter(l -> l.getDureVie() != null && l.getDureVie() > 0
                         && (double) l.getNbLavage() / l.getDureVie() >= SEUIL_FIN_VIE)
@@ -290,7 +290,7 @@ public class AnalytiqueDashboardService {
                 })
                 .collect(Collectors.toList());
 
-        // D) Sacs en attente
+        //  Sacs en attente
         List<Map<String, Object>> alertesSacs = sacInfecteRepo.findAll().stream()
                 .filter(s -> (s.getEtat() == EtatSac.DECLARE
                         || s.getEtat() == EtatSac.RECEPTIONNE)

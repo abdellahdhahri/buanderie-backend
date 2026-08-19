@@ -10,6 +10,7 @@ import tn.softsys.buanderie.service.Process.StockageService;
 import tn.softsys.buanderie.service.management.ArsenalService;
 
 import java.util.List;
+import java.util.Optional;
 
 
 @RestController
@@ -21,8 +22,8 @@ public class ArsenalController {
 
 
     @GetMapping
-    public Arsenal getMyPlace(String  code){
-        return  stockageService.getLingeEmplacement(code);
+    public List<Arsenal> getAll(){
+        return  arsenalService.findAll();
     }
 
 
@@ -53,5 +54,14 @@ public class ArsenalController {
             @RequestBody Arsenal arsenal) {
 
         return arsenalService.update(id, arsenal);
+    }
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable Long id) {
+        arsenalService.delete(id);
+    }
+    @GetMapping("/code/{code}")
+    public Optional<Arsenal> getByCode(String code){
+        return  arsenalService.getBycode(code);
     }
 }

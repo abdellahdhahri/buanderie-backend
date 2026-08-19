@@ -19,7 +19,10 @@ public class LingeDTO {
        // private Long lit_id;
         private Long serviceId;
         private String serviceNom;
+        private  Integer durevie;
         private String serviceCode;
         private Long bacId;
         private String bacCode;
+        private Long porteurId;
+        private String porteurNom;
 }
