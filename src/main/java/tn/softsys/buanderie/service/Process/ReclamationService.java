@@ -9,6 +9,8 @@ import tn.softsys.buanderie.entity.enums.TypeOperation;
 import tn.softsys.buanderie.entity.enums.TypeReclamation;
 import tn.softsys.buanderie.exception.ResourceNotFoundException;
 import tn.softsys.buanderie.repository.*;
+import tn.softsys.buanderie.service.Reporting.NotificationService;
+
 import java.time.LocalDateTime;
 import java.util.List;
 @Service @RequiredArgsConstructor @Transactional
@@ -17,12 +19,14 @@ public class ReclamationService {
     private final AgentRepository agentRepository;
     private final ReclamationRepository reclamationRepository;
     private final HistoriqueLingeRepository historiqueRepository;
+    private final NotificationService notificationService;
+
+
+    @Transactional
     public Reclamation creer(ReclamationRequest request) {
 
-        System.out.println("MAT: " + request.getMatriculeAgent());
-        System.out.println("CODE: " + request.getCodeOuTag());
-
-        Agent agent = agentRepository.findByMatricule(request.getMatriculeAgent())
+        Agent agent = agentRepository
+                .findByMatricule(request.getMatriculeAgent())
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Agent",
@@ -31,11 +35,13 @@ public class ReclamationService {
                         )
                 );
 
-        Linge linge = lingeRepository.findByCodeBarre(request.getCodeOuTag())
+        Linge linge = lingeRepository
+                .findByCodeBarre(request.getCodeOuTag())
                 .orElse(null);
 
         if (linge == null) {
-            linge = lingeRepository.findByRfidTag(request.getCodeOuTag());
+            linge = lingeRepository
+                    .findByRfidTag(request.getCodeOuTag());
         }
 
         if (linge == null) {
@@ -46,7 +52,6 @@ public class ReclamationService {
             );
         }
 
-        // État actuel avant modification
         EtatLinge ancienEtat = linge.getEtat();
 
         Reclamation reclamation = Reclamation.builder()
@@ -55,7 +60,6 @@ public class ReclamationService {
                 .type(request.getType())
                 .dateCreation(LocalDateTime.now())
                 .status(Reclamation.StatutReclamation.EN_COURS)
-              //  .resolue(false)
                 .build();
 
         reclamationRepository.save(reclamation);
@@ -67,25 +71,26 @@ public class ReclamationService {
         if (request.getType() == TypeReclamation.TACHE_PERSISTANTE
                 || request.getType() == TypeReclamation.MAL_LAVE) {
 
-            // Le linge retourne à la réception
             nouvelEtat = EtatLinge.RECEPTION;
 
-            observations = "Réclamation qualité lavage : "
-                    + request.getType().name()
-                    + ". Le linge est retourné à l'état RECEPTIONNE pour retraitement.";
+            observations =
+                    "Réclamation qualité lavage : "
+                            + request.getType().name()
+                            + ". Le linge est retourné à l'état RECEPTION pour retraitement.";
 
         } else {
 
-            // Réclamations nécessitant le retrait du linge du circuit
             nouvelEtat = EtatLinge.HORS_SERVICE;
 
-            observations = "Réclamation : "
-                    + request.getType().name()
-                    + ". Le linge est retiré du circuit et mis hors service.";
+            observations =
+                    "Réclamation : "
+                            + request.getType().name()
+                            + ". Le linge est retiré du circuit et mis hors service.";
         }
 
-        // Modification de l'état
+
         linge.setEtat(nouvelEtat);
+
         lingeRepository.save(linge);
 
 
@@ -101,13 +106,42 @@ public class ReclamationService {
 
         historiqueRepository.save(historique);
 
+
+        //  Notification
+        notificationService.notifierReclamation(
+                linge,
+                reclamation
+        );
+
+
         return reclamation;
     }
     public List<Reclamation> getAll(){
         return reclamationRepository.findAll();
     }
 
+    @Transactional
+    public Reclamation updateStatus(Long reclamationId, Reclamation.StatutReclamation newStatus) {
 
+        Reclamation reclamation = reclamationRepository.findById(reclamationId)
+                .orElseThrow(() -> new RuntimeException("Réclamation introuvable"));
+
+        reclamation.setStatus(newStatus);
+
+        // Cas particulier : linge mal lavé
+        if (reclamation.getType() == TypeReclamation.MAL_LAVE
+                && newStatus == Reclamation.StatutReclamation.RESOLUE) {
+
+            Linge linge = reclamation.getLinge();
+
+            if (linge != null) {
+                linge.setEtat(EtatLinge.STOCKE);
+                lingeRepository.save(linge);
+            }
+        }
+
+        return reclamationRepository.save(reclamation);
+    }
 
 }
 

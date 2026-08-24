@@ -28,4 +28,13 @@ public class ReclamationController {
 
         return ResponseEntity.ok(reclamation);
     }
+    @PutMapping("/{id}/status")
+    public ResponseEntity<Reclamation> updateStatus(
+            @PathVariable Long id,
+            @RequestParam Reclamation.StatutReclamation status) {
+
+        Reclamation reclamation = reclamationService.updateStatus(id, status);
+
+        return ResponseEntity.ok(reclamation);
+    }
 }

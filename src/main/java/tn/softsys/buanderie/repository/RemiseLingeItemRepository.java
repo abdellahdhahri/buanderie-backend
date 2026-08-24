@@ -56,4 +56,5 @@ public interface RemiseLingeItemRepository
             @Param("categorie") CategLinge categorie,
             @Param("remiseId") Long remiseId
     );
+
 }

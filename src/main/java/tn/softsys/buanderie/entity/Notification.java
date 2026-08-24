@@ -1,48 +1,44 @@
 package tn.softsys.buanderie.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "notifications")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-
 public class Notification {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(nullable = false, length = 150)
+    private String titre;
+
+    @Column(nullable = false, length = 500)
     private String message;
+
+    @Column(nullable = false, length = 50)
+    private String type;
+
+    @Column(nullable = false)
     private LocalDateTime dateCreation;
 
-    public Long getId() {
-        return id;
-    }
+    private Long lingeId;
 
-    public String getMessage() {
-        return message;
-    }
+    @Column(length = 100)
+    private String codeBarre;
 
-    public LocalDateTime getDateCreation() {
-        return dateCreation;
-    }
+    @Column(length = 50)
+    private String categorie;
 
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public void setMessage(String message) {
-        this.message = message;
-    }
-
-    public void setDateCreation(LocalDateTime dateCreation) {
-        this.dateCreation = dateCreation;
-    }
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean lue = false;
 }

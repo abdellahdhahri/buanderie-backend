@@ -3,6 +3,7 @@ package tn.softsys.buanderie.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import tn.softsys.buanderie.entity.enums.CategLinge;
+import tn.softsys.buanderie.entity.enums.TypeProgramme;
 
 import java.util.List;
 
@@ -19,7 +20,7 @@ public class ProgrammeLavage {
     private Long id;
 
     @Column(nullable = false, length = 50)
-    private String nom; // COTON_60, DELICAT_30...
+    private String nom;
 
     @Column(name = "temperature_celsius")
     private Integer temperatureCelsius;
@@ -32,6 +33,10 @@ public class ProgrammeLavage {
 
     @Column(length = 200)
     private String description;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private TypeProgramme type;
 
 
     @ElementCollection(targetClass = CategLinge.class)

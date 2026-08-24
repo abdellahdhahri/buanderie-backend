@@ -32,7 +32,17 @@ public class CollecteUniformeService {
         Agent agent = agentRepo.findByMatricule(matriculeAgent).orElseThrow(() -> new ResourceNotFoundException("Agent", "matricule", matriculeAgent));
         Personnel p = sqlPersonnelRepo.findByCodeBarre(codeBadge);
         if (p == null) throw new BusinessException("Personnel introuvable : " + codeBadge);
-        boolean estInfecte = !sqlSejourRepo.findLitsInfectes().isEmpty();
+        //boolean estInfecte = !sqlSejourRepo.findLitsInfectes().isEmpty();
+
+
+        Long fonctionId = p.getFonctionId();
+
+        boolean estInfecte =
+                fonctionId != null &&
+                        Set.of(59, 56, 41, 20).contains(fonctionId);
+
+
+
         List<Linge> uf = lingeRepo.findByPorteurIdAndEtat(p.getId(), EtatLinge.LIVRE);
         uf.forEach(l -> {
             if (l.getStatutCollecte() == StatutCollecteLinge.PROPRE) {
@@ -61,7 +71,7 @@ public class CollecteUniformeService {
         l.setEtat(ne);
         l.setStatutCollecte(st);
         l.setTypeCollecte(tc);
-        l.setPorteurId(null);
+        //l.setPorteurId(null);
         lingeRepo.save(l);
         collecteLingeRepo.save(CollecteLinge.builder().collecte(c).linge(l).typeCollecte(tc).numeroSacInfecte(inf ? bac.getCode() : null).dateScan(LocalDateTime.now()).build());
         historiqueRepo.save(HistoriqueLinge.builder().linge(l).etatAvant(av).etatApres(ne).agent(c.getAgent()).typeOperation(inf ? TypeOperation.DECLARATION_SAC_INFECTE : TypeOperation.COLLECTE).dateOperation(LocalDateTime.now()).collecte(c).observations((inf ? "INFECTE" : "BLANC") + " uniforme=" + codeUniforme + " bac=" + bac.getCode()).build());

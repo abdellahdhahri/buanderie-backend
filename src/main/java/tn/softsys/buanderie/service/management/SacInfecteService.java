@@ -15,6 +15,7 @@ import tn.softsys.buanderie.exception.BusinessException;
 import tn.softsys.buanderie.exception.ResourceNotFoundException;
 import tn.softsys.buanderie.repository.*;
 import tn.softsys.buanderie.entity.CollecteLinge;
+import tn.softsys.buanderie.service.Process.CycleLavageService;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -39,6 +40,7 @@ public class SacInfecteService {
     private final MachineRepository      machineRepository;
     private final CycleLavageRepository  cycleLavageRepository;
     private final CycleLavageItemRepository cycleLavageItemRepository;
+    private final CycleLavageService cycleLavageService;
 
 
 
@@ -122,62 +124,49 @@ public class SacInfecteService {
 
     //  MISE EN LAVAGE
 
-    public SacInfecteDTO mettreEnLavage(String numeroSac,
-                                        String matriculeAgent,
-                                        String codeMachine) {
+    public SacInfecteDTO mettreEnLavage(
+            String numeroSac,
+            String matriculeAgent,
+            String codeMachine) {
 
         SacInfecte sac = sacInfecteRepository.findByNumeroSac(numeroSac)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "SacInfecte", "numeroSac", numeroSac));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "SacInfecte",
+                                "numeroSac",
+                                numeroSac
+                        ));
 
-        if (sac.getEtat() != EtatSac.RECEPTIONNE)
+        if (sac.getEtat() != EtatSac.RECEPTIONNE) {
             throw new BusinessException(
-                    "Le sac doit être RECEPTIONNE. État actuel : " + sac.getEtat());
+                    "Le sac doit être RECEPTIONNE. État actuel : "
+                            + sac.getEtat()
+            );
+        }
 
-        Agent agent = agentRepository.findByMatricule(matriculeAgent)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Agent", "matricule", matriculeAgent));
 
-        Machine machine = machineRepository.findByCode(codeMachine);
-        if (machine == null)
-            throw new ResourceNotFoundException("Machine", "code", codeMachine);
+        CycleLavage cycle = cycleLavageService.startCycleSacInfecte(
+                codeMachine,
+                numeroSac,
+                matriculeAgent
+        );
 
-        if (machine.getEtat() != Machine.EtatMachine.DISPONIBLE)
-            throw new BusinessException(
-                    "Machine " + codeMachine + " indisponible.");
-
-        // Créer le cycle de lavage dédié au sac infecté
-        CycleLavage cycle = CycleLavage.builder()
-                .machine(machine)
-                .agent(agent)
-                .dateDebut(LocalDateTime.now())
-                .statut(StatutCycle.EN_COURS)
-                .poidsCharge(0.0)
-                .build();
-        cycle = cycleLavageRepository.save(cycle);
-
-        // Créer l'item lié au sac (TypeSource.SAC_INFECTE)
-        CycleLavageItem item = CycleLavageItem.builder()
-                .cycleLavage(cycle)
-                .typeSource(TypeSource.SAC_INFECTE)
-                .sourceId(sac.getId())
-                .quantiteChargee(sac.getQuantiteDeclaree())
-                .build();
-        cycleLavageItemRepository.save(item);
-
-        // Mettre la machine EN_COURS
-        machine.setEtat(Machine.EtatMachine.EN_COURS);
-        machineRepository.save(machine);
-
-        // Mettre à jour le sac
-        sac.setEtat(EtatSac.EN_LAVAGE);
-        sac.setDateLavage(LocalDateTime.now());
-        sac.setAgentLavage(agent);
-        sac.setCycleLavage(cycle);
-        sacInfecteRepository.save(sac);
+        // Recharger le sac après modification
+        sac = sacInfecteRepository.findByNumeroSac(numeroSac)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "SacInfecte",
+                                "numeroSac",
+                                numeroSac
+                        ));
 
         return toDTO(sac);
     }
+
+
+
+
+
     //  VÉRIFICATION POST-LAVAGE
     public SacInfecteDTO verifierApresLavage(VerificationLavageRequest request) {
         SacInfecte sac = sacInfecteRepository.findByNumeroSac(request.getNumeroSac())
@@ -229,7 +218,7 @@ public class SacInfecteService {
         return toDTO(sac);
     }
 
-    //  SCAN LINGES PROPRES → RÉINTÉGRATION FLUX NORMAL
+    //  SCAN LINGES PROPRES => RÉINTÉGRATION FLUX NORMAL
     public SacInfecteDTO affecterLingesPropres(AffectationLingesPropresRequest request) {
         SacInfecte sac = sacInfecteRepository.findByNumeroSac(request.getNumeroSac())
                 .orElseThrow(() -> new ResourceNotFoundException("SacInfecte", "numeroSac", request.getNumeroSac()));

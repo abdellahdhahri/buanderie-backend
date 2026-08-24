@@ -33,6 +33,9 @@ public class Personnel {
 
     private String fonction;
 
+    @Column(name = "FonctionID")
+    private Long fonctionId;
+
     @Column(name = "CodeBarre")
     private String codeBarre;
 }

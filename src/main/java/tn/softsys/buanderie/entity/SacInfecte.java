@@ -25,11 +25,12 @@ public class SacInfecte {
     @Column(name = "numero_sac", unique = true, nullable = false, length = 30)
     private String numeroSac;
 
-    // Collecte parente : lie ce sac à la collecte de l'agent
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "collecte_id")
     private Collecte collecte;
+
     private String rfidcode ;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "agent_collecte_id", nullable = false)
     private Agent agentCollecte;

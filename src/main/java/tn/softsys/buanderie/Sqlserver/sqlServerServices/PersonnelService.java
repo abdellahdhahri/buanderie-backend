@@ -21,6 +21,7 @@ public class PersonnelService {
     }
 
 
+
     public PersonnelDto getByCode(String code){
         Personnel personnel = personnelRepository.findByCodeBarre(code);
         return mapToDto(personnel);
@@ -33,6 +34,7 @@ public class PersonnelService {
                 .prenom(personnel.getPrenom())
                 .codeBarre(personnel.getCodeBarre())
                 .fonction(personnel.getFonction())
+                .fonctionId(personnel.getFonctionId())
                 .build();
     }
 

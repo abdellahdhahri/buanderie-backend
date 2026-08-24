@@ -31,7 +31,6 @@ public interface HistoriqueLingeRepository extends JpaRepository<HistoriqueLinge
     List<HistoriqueLinge> findByDateOperationBetweenOrderByDateOperationDesc(
             LocalDateTime debut, LocalDateTime fin);
 
-    // ── Activité agents aujourd'hui (dashboard) ───────────────────────────────
     @Query("""
         SELECT h.agent.matricule,
                h.agent.nom,
@@ -46,7 +45,7 @@ public interface HistoriqueLingeRepository extends JpaRepository<HistoriqueLinge
     """)
     List<Object[]> activiteAgentsAujourdhui(@Param("debutJour") LocalDateTime debutJour);
 
-    // ── Linges bloqués — version simple sans sous-requête corrélée ────────────
+    // ── Linges bloqués
     // Récupère tous les historiques antérieurs au seuil
     // dont l'état final est encore en cours de traitement.
     // Le service filtre ensuite le dernier par linge en Java.

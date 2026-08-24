@@ -8,35 +8,7 @@ import tn.softsys.buanderie.entity.Distribution;
 import tn.softsys.buanderie.service.Process.DistributionService;
 import java.util.Map;
 
-/**
- * Distribution — 3 modes isolés
- *
- * ── CHAMBRE ─────────────────────────────────────────────────────────
- * GET  /api/distribution/chambre          ?codeBarre&matriculeAgent
- *      → scan chambre → lits + linges posés + disponibles STOCKE
- *
- * POST /api/distribution/chambre/lit      ?chambreId&litId&codeOuTag&matriculeAgent
- *      → poser linge sur lit → STOCKE → LIVRE + litIdSqlServer rétabli ✅
- *
- * ── SERVICE ─────────────────────────────────────────────────────────
- * GET  /api/distribution/service          ?serviceId&matriculeAgent
- *      → linges STOCKE disponibles + en place
- *
- * POST /api/distribution/service          ?serviceId&codeOuTag&matriculeAgent
- *      → distribuer linge → STOCKE → LIVRE + serviceId
- *
- * ── UNIFORME ────────────────────────────────────────────────────────
- * GET  /api/distribution/uniforme         ?codeBadge&matriculeAgent
- *      → scan badge → uniformes en possession + disponibles STOCKE
- *
- * POST /api/distribution/uniforme         ?porteurId&porteurNom&codeOuTag&matriculeAgent
- *      → distribuer uniforme → STOCKE → LIVRE + porteurId
- *
- * ── LEGACY (ancien flux) ────────────────────────────────────────────
- * POST /api/distributions
- * POST /api/distributions/{id}/scan      ?codeOuTag&litId&chambreId
- * GET  /api/distributions/{id}
- */
+
 @RestController
 @RequiredArgsConstructor
 public class DistributionController {
@@ -82,7 +54,6 @@ public class DistributionController {
                 distributionService.distribuerAuService(serviceId, codeOuTag, matriculeAgent));
     }
 
-    // ── UNIFORME ──────────────────────────────────────────────────────
 
     @GetMapping("/api/distribution/uniforme")
     public ResponseEntity<Map<String, Object>> uniformesPersonnel(
@@ -103,7 +74,6 @@ public class DistributionController {
                         codeOuTag, matriculeAgent));
     }
 
-    // ── LEGACY ────────────────────────────────────────────────────────
 
     @PostMapping("/api/distributions")
     public ResponseEntity<Distribution> creer(@RequestBody DistributionRequest req) {

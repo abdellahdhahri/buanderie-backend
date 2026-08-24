@@ -19,6 +19,7 @@ import tn.softsys.buanderie.dto.LingeDTO;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.CategLinge;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
+import tn.softsys.buanderie.entity.enums.TypeCollecte;
 import tn.softsys.buanderie.entity.enums.TypeOperation;
 import tn.softsys.buanderie.exception.BusinessException;
 import tn.softsys.buanderie.exception.ResourceNotFoundException;
@@ -159,6 +160,7 @@ public class LingeService {
         linge.setRfidTag(dto.getRfidTag());
         linge.setCategorie(CategLinge.valueOf(dto.getCategorie()));
         linge.setEtat(EtatLinge.STOCKE);
+        linge.setTypeCollecte(TypeCollecte.BLANC);
         linge.setPoids(dto.getPoids());
         linge.setServiceId(dto.getServiceId());
         linge.setDureVie(dto.getDurevie());

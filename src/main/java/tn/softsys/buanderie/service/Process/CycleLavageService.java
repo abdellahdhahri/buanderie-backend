@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tn.softsys.buanderie.dto.Lot.LotScanResponse;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
+import tn.softsys.buanderie.exception.BusinessException;
 import tn.softsys.buanderie.exception.ResourceNotFoundException;
 import tn.softsys.buanderie.repository.*;
 import tn.softsys.buanderie.service.Reporting.NotificationService;
@@ -27,6 +28,7 @@ public class CycleLavageService {
     private final LingeRepository lingeRepository;
     private final HistoriqueLingeRepository historiqueLingeRepository;
     private final NotificationService notificationService;
+    private final SacInfecteRepository sacInfecteRepository;
     public LotScanResponse scanLot(String codeLot) {
         Lot lot = lotRepo.findByCodeLot(codeLot)
                 .orElseThrow(() -> new ResourceNotFoundException("Lot", "code", codeLot));
@@ -117,8 +119,8 @@ public class CycleLavageService {
         addLotToCycleInternal(cycle, lot, poidsCharge);
         //viderLot(lot);
         machine.setEtat(Machine.EtatMachine.EN_COURS);
-        //lot.setEtat(EtatLot.EN_LAVAGE);
-        lot.setPoidsActuel(0.0);
+        lot.setEtat(EtatLot.EN_LAVAGE);
+       // lot.setPoidsActuel(0.0);
         return cycle;
     }
     public CycleLavage addLotToCycle(Long cycleId,
@@ -159,61 +161,109 @@ public class CycleLavageService {
     public CycleLavage finishCycle(Long cycleId) {
 
         CycleLavage cycle = cycleRepo.findById(cycleId)
-                .orElseThrow(() -> new ResourceNotFoundException("Cycle non trouvé"));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Cycle non trouvé"));
+
+        if (cycle.getStatut() != StatutCycle.EN_COURS) {
+            throw new BusinessException(
+                    "Le cycle n'est pas en cours. État actuel : "
+                            + cycle.getStatut()
+            );
+        }
 
         cycle.setStatut(StatutCycle.TERMINE);
         cycle.setDateFin(LocalDateTime.now());
 
         Machine machine = cycle.getMachine();
-        machine.setEtat(Machine.EtatMachine.DISPONIBLE);
 
         List<CycleLavageItem> items =
                 itemRepo.findByCycleLavage(cycle);
 
         for (CycleLavageItem item : items) {
 
-            Lot lot = lotRepo.findById(item.getSourceId())
-                    .orElseThrow(() ->
-                            new ResourceNotFoundException("Lot introuvable"));
+            // =====================================================
+            // LAVAGE NORMAL : SOURCE = LOT_TRI
+            // =====================================================
+            if (item.getTypeSource() == TypeSource.LOT_TRI) {
 
-            List<Linge> linges =
-                    lingeRepository.findByLot_CodeLot(lot.getCodeLot());
+                Lot lot = lotRepo.findById(item.getSourceId())
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "Lot introuvable"
+                                ));
 
-            for (Linge linge : linges) {
+                List<Linge> linges =
+                        lingeRepository.findByLot_CodeLot(
+                                lot.getCodeLot()
+                        );
 
-                EtatLinge ancienEtat = linge.getEtat();
+                for (Linge linge : linges) {
 
-                linge.setEtat(EtatLinge.LAVE);
-                linge.setNbLavage(linge.getNbLavage()+ 1);
+                    EtatLinge ancienEtat = linge.getEtat();
+
+                    linge.setEtat(EtatLinge.LAVE);
+                    linge.setNbLavage(
+                            linge.getNbLavage() + 1
+                    );
+
+                    historiqueLingeRepository.save(
+                            HistoriqueLinge.builder()
+                                    .linge(linge)
+                                    .etatAvant(ancienEtat)
+                                    .etatApres(EtatLinge.LAVE)
+                                    .agent(cycle.getAgent())
+                                    .typeOperation(TypeOperation.FIN_LAVAGE)
+                                    .dateOperation(LocalDateTime.now())
+                                    .observations(
+                                            "Fin du cycle de lavage"
+                                    )
+                                    .build()
+                    );
+                }
+
+                lingeRepository.saveAll(linges);
 
 
-               // linge.setLot(null);
-
-                historiqueLingeRepository.save(
-                        HistoriqueLinge.builder()
-                                .linge(linge)
-                                .etatAvant(ancienEtat)
-                                .etatApres(EtatLinge.LAVE)
-                                .agent(cycle.getAgent())
-                                .typeOperation(TypeOperation.FIN_LAVAGE)
-                                .dateOperation(LocalDateTime.now())
-                                .observations("Fin du cycle de lavage")
-                                .build()
-                );
+                lot.setEtat(EtatLot.PRET_SECHAGE);
+                lotRepo.save(lot);
             }
 
-            lingeRepository.saveAll(linges);
+            // =====================================================
+            //  LAVAGE INFECTÉ : SOURCE = SAC_INFECTE
+            // =====================================================
+            else if (item.getTypeSource() == TypeSource.SAC_INFECTE) {
 
-            lot.setPoidsActuel(0.0);
-            lot.setEtat(EtatLot.EN_TRI);
+                SacInfecte sac = sacInfecteRepository
+                        .findById(item.getSourceId())
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "Sac infecté introuvable"
+                                ));
 
-            lotRepo.save(lot);
+
+
+                // On garde le sac dans son état EN_LAVAGE
+                // jusqu'à la vérification physique.
+                if (sac.getEtat() != EtatSac.EN_LAVAGE) {
+                    throw new BusinessException(
+                            "Le sac " + sac.getNumeroSac()
+                                    + " n'est pas EN_LAVAGE."
+                    );
+                }
+
+                sacInfecteRepository.save(sac);
+            }
         }
 
+        // La machine est maintenant disponible
+        machine.setEtat(Machine.EtatMachine.DISPONIBLE);
         machineRepo.save(machine);
 
         return cycleRepo.save(cycle);
     }
+
+
+
     //METHODE POUR METTRE A JOURS LES ETATS ES LINGES EN LAVAGE
     private void mettreLingesEnLavage(String codeLot) {
         List<Linge> linges = lingeRepository.findByLot_CodeLot(codeLot);
@@ -272,7 +322,6 @@ public class CycleLavageService {
         for (CycleLavageItem item : items) {
             if (item.getSourceId() == null) continue;
 
-            // Récupérer les linges via la relation Linge.lot
             List<Linge> linges = lingeRepository.findByLot_Id(item.getSourceId());
 
             for (Linge l : linges) {
@@ -289,5 +338,108 @@ public class CycleLavageService {
             }
         }
         return result;
+    }
+
+
+
+
+    //===========================================================//
+
+
+    @Transactional
+    public CycleLavage startCycleSacInfecte(
+            String codeMachine,
+            String numeroSac,
+            String matriculeAgent) {
+
+        // Agent
+        Agent agent = agentRepository.findByMatricule(matriculeAgent)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "AGENT",
+                                "matriculeAgent",
+                                matriculeAgent
+                        ));
+
+        // Sac
+        SacInfecte sac = sacInfecteRepository
+                .findByNumeroSac(numeroSac)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "SacInfecte",
+                                "numeroSac",
+                                numeroSac
+                        ));
+
+        // Vérification état
+        if (sac.getEtat() != EtatSac.RECEPTIONNE) {
+            throw new BusinessException(
+                    "Le sac doit être RECEPTIONNE. État actuel : "
+                            + sac.getEtat()
+            );
+        }
+
+        // Machine
+        Machine machine = machineRepo.findByCode(codeMachine);
+
+        if (machine == null) {
+            throw new ResourceNotFoundException(
+                    "Machine",
+                    "code",
+                    codeMachine
+            );
+        }
+
+        if (machine.getEtat() != Machine.EtatMachine.DISPONIBLE) {
+            throw new BusinessException(
+                    "La machine " + codeMachine +
+                            " n'est pas disponible."
+            );
+        }
+
+        // Programme automatique de désinfection
+        ProgrammeLavage programmeDesinfection =
+                programmeRepo.findByNom("DESINFECTION_INFECTE")
+                        .orElseThrow(() ->
+                                new BusinessException(
+                                        "Le programme DESINFECTION_INFECTE " +
+                                                "est introuvable."
+                                ));
+
+        // Création du cycle
+        CycleLavage cycle = CycleLavage.builder()
+                .machine(machine)
+                .agent(agent)
+                .programmeLavage(programmeDesinfection)
+                .dateDebut(LocalDateTime.now())
+                .statut(StatutCycle.EN_COURS)
+                .poidsCharge(0.0)
+                .build();
+
+        cycle = cycleRepo.save(cycle);
+
+        // Le cycle contient le SAC, pas les linges
+        CycleLavageItem item = CycleLavageItem.builder()
+                .cycleLavage(cycle)
+                .typeSource(TypeSource.SAC_INFECTE)
+                .sourceId(sac.getId())
+                .quantiteChargee(sac.getQuantiteDeclaree())
+                .build();
+
+        itemRepo.save(item);
+
+        // Machine occupée
+        machine.setEtat(Machine.EtatMachine.EN_COURS);
+        machineRepo.save(machine);
+
+        // Sac en lavage
+        sac.setEtat(EtatSac.EN_LAVAGE);
+        sac.setDateLavage(LocalDateTime.now());
+        sac.setAgentLavage(agent);
+        sac.setCycleLavage(cycle);
+
+        sacInfecteRepository.save(sac);
+
+        return cycle;
     }
 }

@@ -14,4 +14,5 @@ public class PersonnelDto {
     private String prenom;
     private String codeBarre;
     private String fonction;
+    private Long fonctionId;
 }

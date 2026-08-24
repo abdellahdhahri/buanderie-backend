@@ -51,6 +51,7 @@ public class CollecteChambreService {
         Collecte c = collecteRepo.save(Collecte.builder().agent(agent)
                 .chambreIdSqlServer(chambre.getId()).codeChambre(chambre.getCode())
                 .typeCollecte(TypeCollecte.MIXTE).etatCollecte(EtatCollecte.EN_TRAITEMENT)
+                        .service(chambre.getService().getId())
                 .nbAttendus(nb).numeroCollecte("CH-"+System.currentTimeMillis()).build());
         return Map.of("collecteId",c.getId(),"codeChambre",chambre.getCode(),
                 "nbLits",litsDto.size(),"nbLinges",nb,"lits",litsDto);
@@ -72,6 +73,7 @@ public class CollecteChambreService {
         List<String> codes=new ArrayList<>();
         for(Linge l:lg){
             EtatLinge av=l.getEtat(); l.setBac(bac); l.setEtat(ne); l.setStatutCollecte(st);
+            l.setChambreIdSqlServer(null);
             l.setTypeCollecte(tc); l.setLitIdSqlServer(null); lingeRepo.save(l);
             collecteLingeRepo.save(CollecteLinge.builder().collecte(c).linge(l).typeCollecte(tc)
                     .numeroSacInfecte(inf?bac.getCode():null).dateScan(LocalDateTime.now()).build());
