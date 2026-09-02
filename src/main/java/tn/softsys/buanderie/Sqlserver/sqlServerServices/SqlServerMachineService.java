@@ -28,7 +28,6 @@ public class SqlServerMachineService {
         return mapToDTO(machine);
     }
 
-//je veux que apres lavage si une linge a une duree de vie
 
     private MachineDTO mapToDTO(Machine machine) {
         return MachineDTO.builder()

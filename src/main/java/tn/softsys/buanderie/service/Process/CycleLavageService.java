@@ -3,6 +3,8 @@ package tn.softsys.buanderie.service.Process;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
+import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
 import tn.softsys.buanderie.dto.Lot.LotScanResponse;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
@@ -29,6 +31,10 @@ public class CycleLavageService {
     private final HistoriqueLingeRepository historiqueLingeRepository;
     private final NotificationService notificationService;
     private final SacInfecteRepository sacInfecteRepository;
+
+    private final SqlServerPersonnelRepository sqlPersonnelRepo;
+
+
     public LotScanResponse scanLot(String codeLot) {
         Lot lot = lotRepo.findByCodeLot(codeLot)
                 .orElseThrow(() -> new ResourceNotFoundException("Lot", "code", codeLot));
@@ -60,8 +66,8 @@ public class CycleLavageService {
                                   String codeLot,
                                   String matriculeAgent,
                                   Double poidsCharge) {
-        Agent agent = agentRepository.findByMatricule(matriculeAgent)
-                .orElseThrow(() -> new ResourceNotFoundException("AGENT", "matriculeAgent", matriculeAgent));
+        Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+//                .orElseThrow(() -> new ResourceNotFoundException("AGENT", "matriculeAgent", matriculeAgent));
 
         Machine machine = machineRepo.findByCode(codeMachine);
                //.orElseThrow(() -> new ResourceNotFoundException("Machine", "code", codeMachine));
@@ -82,7 +88,7 @@ public class CycleLavageService {
         CycleLavage cycle = CycleLavage.builder()
                 .machine(machine)
                 .programmeLavage(programme)
-                .agent(agent)
+               // .agent(agent)
                 .poidsCharge(poidsCharge)
                 .dateDebut(LocalDateTime.now())
                 .statut(StatutCycle.EN_COURS)
@@ -105,7 +111,7 @@ public class CycleLavageService {
                     .linge(linge)
                     .etatAvant(ancienEtat)
                     .etatApres(EtatLinge.EN_LAVAGE)
-                    .agent(agent)
+                    .personnelId(agent.getId())
                     .typeOperation(TypeOperation.DEMARRAGE_LAVAGE)
                     .dateOperation(LocalDateTime.now())
                     .observations("Passage en lavage")
@@ -181,9 +187,7 @@ public class CycleLavageService {
 
         for (CycleLavageItem item : items) {
 
-            // =====================================================
-            // LAVAGE NORMAL : SOURCE = LOT_TRI
-            // =====================================================
+
             if (item.getTypeSource() == TypeSource.LOT_TRI) {
 
                 Lot lot = lotRepo.findById(item.getSourceId())
@@ -211,7 +215,7 @@ public class CycleLavageService {
                                     .linge(linge)
                                     .etatAvant(ancienEtat)
                                     .etatApres(EtatLinge.LAVE)
-                                    .agent(cycle.getAgent())
+                                  //  .agent(cycle.getAgent())
                                     .typeOperation(TypeOperation.FIN_LAVAGE)
                                     .dateOperation(LocalDateTime.now())
                                     .observations(
@@ -273,23 +277,23 @@ public class CycleLavageService {
         }
         lingeRepository.saveAll(linges);
     }
-    private void historiserLavage(Linge linge, Agent agent, EtatLinge nouvelEtat) {
-        HistoriqueLinge historique = HistoriqueLinge.builder()
-                .linge(linge)
-                .etatAvant(linge.getEtat())
-                .etatApres(nouvelEtat)
-                .agent(agent)
-                .typeOperation(TypeOperation.DEMARRAGE_LAVAGE)
-                .dateOperation(LocalDateTime.now())
-                .observations("Passage en lavage")
-                .dateOperation(LocalDateTime.now())
-                //.collecte(linge.getc())
-               // .sacInfecte(linge.getSacInfecte())
-                .build();
-        historiqueLingeRepository.save(historique);
-        linge.setEtat(nouvelEtat);
-        lingeRepository.save(linge);
-    }
+//    private void historiserLavage(Linge linge, Agent agent, EtatLinge nouvelEtat) {
+//        HistoriqueLinge historique = HistoriqueLinge.builder()
+//                .linge(linge)
+//                .etatAvant(linge.getEtat())
+//                .etatApres(nouvelEtat)
+//                .agent(agent)
+//                .typeOperation(TypeOperation.DEMARRAGE_LAVAGE)
+//                .dateOperation(LocalDateTime.now())
+//                .observations("Passage en lavage")
+//                .dateOperation(LocalDateTime.now())
+//                //.collecte(linge.getc())
+//               // .sacInfecte(linge.getSacInfecte())
+//                .build();
+//        historiqueLingeRepository.save(historique);
+//        linge.setEtat(nouvelEtat);
+//        lingeRepository.save(linge);
+//    }
 
     //methode pour vider le lots mis en lavage
     @Transactional

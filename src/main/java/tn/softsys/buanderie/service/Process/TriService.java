@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
+import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
+import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
 import tn.softsys.buanderie.dto.Lot.AffectationLotRequest;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
@@ -27,15 +29,16 @@ public class TriService {
     private final AgentRepository agentRepository;
     private final HistoriqueLingeRepository historiqueLingeRepository;
     private final LotRepository lotRepository;
+    private final SqlServerPersonnelRepository sqlPersonnelRepo;
 
     public List<Linge> getLingesBac(Long bacId) {
         return lingeRepository.findByBacId(bacId);
     }
     @Transactional
     public Lot affecterAuLot(AffectationLotRequest request) {
-        Agent agent = agentRepository.findByMatricule(request.getMatriculeAgent())
-                .orElseThrow(() ->
-                        new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent()));
+        Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
+//                .orElseThrow(() ->
+//                        new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent()));
         Linge linge = lingeRepository.findByCodeBarre(request.getCodeOuTag())
                 .orElse(null);
         if (linge == null) {
@@ -91,7 +94,7 @@ public class TriService {
                         .linge(linge)
                         .etatAvant(EtatLinge.RECEPTION)
                         .etatApres(EtatLinge.EN_TRI)
-                        .agent(agent)
+                        .personnelId(agent.getId())
                         .typeOperation(TypeOperation.TRI)
                         .dateOperation(LocalDateTime.now())
                         .observations("Affectation au lot " + lot.getCodeLot())

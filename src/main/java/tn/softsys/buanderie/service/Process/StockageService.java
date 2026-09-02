@@ -4,7 +4,9 @@ package tn.softsys.buanderie.service.Process;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerServiceRepository;
+import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
 import tn.softsys.buanderie.dto.StockageRequest;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.CategLinge;
@@ -28,16 +30,17 @@ public class StockageService {
     private final AgentRepository agentRepository;
     private final ArsenalRepository arsenalRepository;
     private final NotificationService notificationService;
+    private final SqlServerPersonnelRepository sqlPersonnelRepo;
     @Transactional
     public Linge Stocker(StockageRequest request) {
 
         //recuperer l'agent
-        Agent agent = agentRepository.findByMatricule(request.getMatriculeAgent())
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Agent",
-                                "matricule",
-                                request.getMatriculeAgent()));
+        Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
+//                .orElseThrow(() ->
+//                        new ResourceNotFoundException(
+//                                "Agent",
+//                                "matricule",
+//                                request.getMatriculeAgent()));
         //recuperer linge
         Linge linge = rechercherLinge(request.getCodeOuTag());
         Arsenal  arsenal = getLingeEmplacement(linge.getCodeBarre());
@@ -62,7 +65,7 @@ public class StockageService {
         linge.setEmplacement(arsenal);
         creerHistorique(
                 linge,
-                agent,
+                agent.getId(),
                 ancienEtat,
                 EtatLinge.STOCKE,
                 "Stocké dans l'armoire du  "+arsenal.getNom()
@@ -97,7 +100,7 @@ public class StockageService {
     //methode pour creer le historique d'une linge
     private void creerHistorique(
             Linge linge,
-            Agent agent,
+            Long id,
             EtatLinge avant,
             EtatLinge apres,
             String observation) {
@@ -106,7 +109,7 @@ public class StockageService {
 
                 HistoriqueLinge.builder()
                         .linge(linge)
-                        .agent(agent)
+                        .personnelId(id)
                         .etatAvant(avant)
                         .etatApres(apres)
                         .typeOperation(TypeOperation.MISE_EN_STOCKAGE)

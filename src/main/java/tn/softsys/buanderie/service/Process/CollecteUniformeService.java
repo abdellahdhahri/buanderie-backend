@@ -28,32 +28,152 @@ public class CollecteUniformeService {
     private final SqlServerPersonnelRepository sqlPersonnelRepo;
     private final SqlServerSejourRepository sqlSejourRepo;
 
-    public Map<String, Object> ouvrirUniforme(String matriculeAgent, String codeBadge) {
-        Agent agent = agentRepo.findByMatricule(matriculeAgent).orElseThrow(() -> new ResourceNotFoundException("Agent", "matricule", matriculeAgent));
+    public Map<String, Object> ouvrirUniforme(
+            String matriculeAgent,
+            String codeBadge) {
+
+
+
         Personnel p = sqlPersonnelRepo.findByCodeBarre(codeBadge);
-        if (p == null) throw new BusinessException("Personnel introuvable : " + codeBadge);
-        //boolean estInfecte = !sqlSejourRepo.findLitsInfectes().isEmpty();
+
+        if (p == null) {
+            throw new BusinessException(
+                    "Personnel introuvable : " + codeBadge
+            );
+        }
+
+        Long personnelId = p.getId();
+
+
 
 
         Long fonctionId = p.getFonctionId();
 
         boolean estInfecte =
                 fonctionId != null &&
-                        Set.of(59, 56, 41, 20).contains(fonctionId);
+                        Set.of(59L, 56L, 41L, 20L).contains(fonctionId);
 
 
 
-        List<Linge> uf = lingeRepo.findByPorteurIdAndEtat(p.getId(), EtatLinge.LIVRE);
+
+        List<Linge> uf =
+                lingeRepo.findByPorteurIdAndEtat(
+                        personnelId,
+                        EtatLinge.LIVRE
+                );
+
+
+
+
         uf.forEach(l -> {
-            if (l.getStatutCollecte() == StatutCollecteLinge.PROPRE) {
+
+            if (l.getStatutCollecte()
+                    == StatutCollecteLinge.PROPRE) {
+
                 l.setStatutCollecte(null);
                 lingeRepo.save(l);
             }
         });
-        if (uf.isEmpty()) throw new BusinessException("Aucun uniforme LIVRE pour " + p.getNom() + " " + p.getPrenom());
-        Collecte c = collecteRepo.save(Collecte.builder().agent(agent).typeCollecte(TypeCollecte.MIXTE).etatCollecte(EtatCollecte.EN_TRAITEMENT).nbAttendus(uf.size()).numeroCollecte("UNI-" + System.currentTimeMillis()).build());
-        List<Map<String, Object>> ld = uf.stream().map(l -> Map.<String, Object>of("lingeId", l.getId(), "codeBarre", l.getCodeBarre(), "rfid", l.getRfidTag() != null ? l.getRfidTag() : "", "categorie", l.getCategorie().name(), "statut", "", "estInfecte", estInfecte)).collect(Collectors.toList());
-        return Map.of("collecteId", c.getId(), "personnelId", p.getId(), "personnelNom", p.getNom() + " " + p.getPrenom(), "personnelFonction", p.getFonction() != null ? p.getFonction() : "", "estInfecte", estInfecte, "nbUniformes", uf.size(), "uniformes", ld);
+
+
+
+
+        if (uf.isEmpty()) {
+
+            throw new BusinessException(
+                    "Aucun uniforme LIVRE pour "
+                            + p.getNom()
+                            + " "
+                            + p.getPrenom()
+            );
+        }
+
+
+
+
+        Collecte c =
+                collecteRepo.save(
+                        Collecte.builder()
+
+                                // ID du Personnel SQL Server
+                                .personnelId(personnelId)
+
+                                .typeCollecte(
+                                        TypeCollecte.MIXTE
+                                )
+
+                                .etatCollecte(
+                                        EtatCollecte.EN_TRAITEMENT
+                                )
+
+                                .nbAttendus(
+                                        uf.size()
+                                )
+
+                                .numeroCollecte(
+                                        "UNI-"
+                                                + System.currentTimeMillis()
+                                )
+
+                                .build()
+                );
+
+
+
+
+        List<Map<String, Object>> ld =
+                uf.stream()
+                        .map(l ->
+                                Map.<String, Object>of(
+                                        "lingeId",
+                                        l.getId(),
+
+                                        "codeBarre",
+                                        l.getCodeBarre(),
+
+                                        "rfid",
+                                        l.getRfidTag() != null
+                                                ? l.getRfidTag()
+                                                : "",
+
+                                        "categorie",
+                                        l.getCategorie().name(),
+
+                                        "statut",
+                                        "",
+
+                                        "estInfecte",
+                                        estInfecte
+                                )
+                        )
+                        .collect(Collectors.toList());
+
+
+
+        return Map.of(
+                "collecteId",
+                c.getId(),
+
+                "personnelId",
+                personnelId,
+
+                "personnelNom",
+                p.getNom() + " " + p.getPrenom(),
+
+                "personnelFonction",
+                p.getFonction() != null
+                        ? p.getFonction()
+                        : "",
+
+                "estInfecte",
+                estInfecte,
+
+                "nbUniformes",
+                uf.size(),
+
+                "uniformes",
+                ld
+        );
     }
 
     @Transactional
@@ -74,7 +194,9 @@ public class CollecteUniformeService {
         //l.setPorteurId(null);
         lingeRepo.save(l);
         collecteLingeRepo.save(CollecteLinge.builder().collecte(c).linge(l).typeCollecte(tc).numeroSacInfecte(inf ? bac.getCode() : null).dateScan(LocalDateTime.now()).build());
-        historiqueRepo.save(HistoriqueLinge.builder().linge(l).etatAvant(av).etatApres(ne).agent(c.getAgent()).typeOperation(inf ? TypeOperation.DECLARATION_SAC_INFECTE : TypeOperation.COLLECTE).dateOperation(LocalDateTime.now()).collecte(c).observations((inf ? "INFECTE" : "BLANC") + " uniforme=" + codeUniforme + " bac=" + bac.getCode()).build());
+        historiqueRepo.save(HistoriqueLinge.builder().linge(l).etatAvant(av).etatApres(ne)
+             //   agent(c.getAgent())
+                .typeOperation(inf ? TypeOperation.DECLARATION_SAC_INFECTE : TypeOperation.COLLECTE).dateOperation(LocalDateTime.now()).collecte(c).observations((inf ? "INFECTE" : "BLANC") + " uniforme=" + codeUniforme + " bac=" + bac.getCode()).build());
         return Map.of("lingeId", l.getId(), "codeBarre", l.getCodeBarre(), "categorie", l.getCategorie().name(), "statut", inf ? "INFECTE" : "BLANC", "bac", bac.getCode());
     }
 
@@ -86,7 +208,9 @@ public class CollecteUniformeService {
         l.setStatutCollecte(StatutCollecteLinge.MANQUANT);
         lingeRepo.save(l);
         collecteLingeRepo.save(CollecteLinge.builder().collecte(c).linge(l).typeCollecte(TypeCollecte.MANQUANT).dateScan(LocalDateTime.now()).build());
-        historiqueRepo.save(HistoriqueLinge.builder().linge(l).etatAvant(av).etatApres(EtatLinge.MANQUANT).agent(c.getAgent()).typeOperation(TypeOperation.CHANGEMENT_ETAT_LINGE).dateOperation(LocalDateTime.now()).collecte(c).observations("Uniforme manquant").build());
+        historiqueRepo.save(HistoriqueLinge.builder().linge(l).etatAvant(av).etatApres(EtatLinge.MANQUANT)
+               // .agent(c.getAgent())
+                .typeOperation(TypeOperation.CHANGEMENT_ETAT_LINGE).dateOperation(LocalDateTime.now()).collecte(c).observations("Uniforme manquant").build());
         return Map.of("lingeId", lingeId, "statut", "MANQUANT");
     }
 

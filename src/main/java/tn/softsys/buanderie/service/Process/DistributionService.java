@@ -98,9 +98,9 @@ public class DistributionService {
                                                 Long litId,
                                                 String codeOuTag,
                                                 String matriculeAgent) {
-        Agent agent = agentRepo.findByMatricule(matriculeAgent)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Agent", "matricule", matriculeAgent));
+        Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                        "Agent", "matricule", matriculeAgent));
 
         Linge linge = findLinge(codeOuTag);
 
@@ -135,7 +135,7 @@ public class DistributionService {
                 .linge(linge)
                 .etatAvant(ancien)
                 .etatApres(EtatLinge.LIVRE)
-                .agent(agent)
+                .personnelId(agent.getId())
                 .typeOperation(TypeOperation.LIVRAISON)
                 .dateOperation(LocalDateTime.now())
                 .observations("Distribué → lit=" + litId
@@ -196,9 +196,9 @@ public class DistributionService {
     public Map<String, Object> distribuerAuService(Long serviceId,
                                                    String codeOuTag,
                                                    String matriculeAgent) {
-        Agent agent = agentRepo.findByMatricule(matriculeAgent)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Agent", "matricule", matriculeAgent));
+        Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                        "Agent", "matricule", matriculeAgent));
 
         Linge linge = findLinge(codeOuTag);
 
@@ -222,7 +222,7 @@ public class DistributionService {
         historiqueRepo.save(HistoriqueLinge.builder()
                 .linge(linge)
                 .etatAvant(ancien).etatApres(EtatLinge.LIVRE)
-                .agent(agent)
+                .personnelId(agent.getId())
                 .typeOperation(TypeOperation.LIVRAISON)
                 .dateOperation(LocalDateTime.now())
                 .observations("Distribué → service=" + serviceId)
@@ -281,9 +281,9 @@ public class DistributionService {
                                                   String porteurNom,
                                                   String codeOuTag,
                                                   String matriculeAgent) {
-        Agent agent = agentRepo.findByMatricule(matriculeAgent)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Agent", "matricule", matriculeAgent));
+        Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                        "Agent", "matricule", matriculeAgent));
 
         Linge linge = findLinge(codeOuTag);
 
@@ -306,7 +306,7 @@ public class DistributionService {
         historiqueRepo.save(HistoriqueLinge.builder()
                 .linge(linge)
                 .etatAvant(ancien).etatApres(EtatLinge.LIVRE)
-                .agent(agent)
+                .personnelId(agent.getId())
                 .typeOperation(TypeOperation.LIVRAISON)
                 .dateOperation(LocalDateTime.now())
                 .observations("Uniforme → porteur=" + porteurId + " " + porteurNom)
@@ -326,9 +326,9 @@ public class DistributionService {
 
     @Transactional
     public Distribution creerDistribution(DistributionRequest request) {
-        Agent agent = agentRepo.findByMatricule(request.getMatriculeAgent())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Agent", "matricule", request.getMatriculeAgent()));
+        Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                        "Agent", "matricule", request.getMatriculeAgent()));
 
         tn.softsys.buanderie.Sqlserver.sqlServerEntities.Service service =
                 sqlServiceRepo.findById(request.getServiceId())
@@ -342,7 +342,7 @@ public class DistributionService {
                         "Aucune collecte active pour ce service."));
 
         return distributionRepo.save(Distribution.builder()
-                .agent(agent)
+                .personnelId(agent.getId())
                 .serviceId(service.getId())
                 .collecte(collecte)
                 .dateDistribution(LocalDateTime.now())
@@ -382,7 +382,7 @@ public class DistributionService {
         historiqueRepo.save(HistoriqueLinge.builder()
                 .linge(linge)
                 .etatAvant(ancien).etatApres(EtatLinge.LIVRE)
-                .agent(dist.getAgent())
+                .personnelId(dist.getPersonnelId())
                 .typeOperation(TypeOperation.LIVRAISON)
                 .dateOperation(LocalDateTime.now())
                 .observations("Distribution #" + distributionId

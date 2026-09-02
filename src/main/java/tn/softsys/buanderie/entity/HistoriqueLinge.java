@@ -33,9 +33,8 @@ public class HistoriqueLinge {
     @Column(name = "etat_apres", nullable = false, length = 30)
     private EtatLinge etatApres;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "agent_id", nullable = false)
-    private Agent agent;
+    @Column(name = "personnel_id", nullable = false)
+    private Long personnelId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "type_operation", nullable = false, length = 40)
@@ -47,12 +46,10 @@ public class HistoriqueLinge {
     @Column(length = 500)
     private String observations;
 
-    /** Lien vers la collecte parente — traçabilité complète linge → collecte → agent */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "collecte_id")
     private Collecte collecte;
 
-    /** Lien vers le sac infecté — traçabilité complète linge infecté → sac → collecte */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "sac_infecte_id")
     private SacInfecte sacInfecte;

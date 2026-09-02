@@ -18,32 +18,28 @@ public interface HistoriqueLingeRepository extends JpaRepository<HistoriqueLinge
 
     List<HistoriqueLinge> findByLingeCodeBarreOrderByDateOperationDesc(String codeBarre);
 
-    List<HistoriqueLinge> findByAgentIdOrderByDateOperationDesc(Long agentId);
 
-    List<HistoriqueLinge> findByAgentMatriculeOrderByDateOperationDesc(String matricule);
 
     List<HistoriqueLinge> findByCollecte_IdOrderByDateOperationDesc(Long collecteId);
 
     List<HistoriqueLinge> findBySacInfecte_NumeroSacOrderByDateOperationDesc(String numeroSac);
 
-    List<HistoriqueLinge> findByTypeOperationOrderByDateOperationDesc(TypeOperation op);
 
     List<HistoriqueLinge> findByDateOperationBetweenOrderByDateOperationDesc(
             LocalDateTime debut, LocalDateTime fin);
 
     @Query("""
-        SELECT h.agent.matricule,
-               h.agent.nom,
-               h.agent.prenom,
-               COUNT(h),
-               MAX(h.typeOperation)
-        FROM HistoriqueLinge h
-        WHERE h.dateOperation >= :debutJour
-          AND h.agent IS NOT NULL
-        GROUP BY h.agent.matricule, h.agent.nom, h.agent.prenom
-        ORDER BY COUNT(h) DESC
-    """)
-    List<Object[]> activiteAgentsAujourdhui(@Param("debutJour") LocalDateTime debutJour);
+    SELECT h.personnelId,
+           COUNT(h),
+           MAX(h.typeOperation)
+    FROM HistoriqueLinge h
+    WHERE h.dateOperation >= :debutJour
+      AND h.personnelId IS NOT NULL
+    GROUP BY h.personnelId
+    ORDER BY COUNT(h) DESC
+""")
+    List<Object[]> activiteAgentsAujourdhui(
+            @Param("debutJour") LocalDateTime debutJour);
 
     // ── Linges bloqués
     // Récupère tous les historiques antérieurs au seuil

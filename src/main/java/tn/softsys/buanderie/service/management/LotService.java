@@ -41,13 +41,16 @@ public class LotService {
         lot.setEtat(EtatLot.EN_TRI);
         lot.setDateCreation(LocalDateTime.now());
 
+        String type = dto.getTypeCollecte().name().substring(0, 2).toUpperCase();
+        String categorie = dto.getCategorie().name().substring(0, 2).toUpperCase();
+
+        String date = LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyMMdd"));
+
         lot.setCodeLot(
-                "LOT-"
-                        + dto.getTypeCollecte()
-                        + "-"
-                        + dto.getCategorie()
-                        + "-"
-                        + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
+                type + "-" +
+                        categorie + "-" +
+                        date
         );
 
         return lotRepository.save(lot);

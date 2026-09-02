@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,7 +50,13 @@ public class LingeService {
     private final SqlServerPersonnelRepository personnelRepository;
 
     public Page<LingeDTO> getLingesPaged(int page, int size, String categorie, String etatStr, Long serviceId, String search) {
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by(Sort.Direction.DESC, "dateCreation")
+
+        );
+
         Specification<Linge> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (categorie != null && !categorie.trim().isEmpty()) {
@@ -197,12 +204,13 @@ public class LingeService {
 
     public Linge changerEtat(Long lingeId, EtatLinge nouvelEtat, String matriculeAgent, String observations) {
         Linge linge = findById(lingeId);
-        Agent agent = agentRepository.findByMatricule(matriculeAgent).orElseThrow(() -> new ResourceNotFoundException("Agent", "matricule", matriculeAgent));
+        Personnel agent = personnelRepository.findByCodeBarre(matriculeAgent);
+//                .orElseThrow(() -> new ResourceNotFoundException("Agent", "matricule", matriculeAgent));
         EtatLinge ancienEtat = linge.getEtat();
         linge.setEtat(nouvelEtat);
         lingeRepository.save(linge);
         HistoriqueLinge h = HistoriqueLinge.builder().linge(linge).etatAvant(ancienEtat).etatApres(nouvelEtat)
-                .agent(agent).typeOperation(TypeOperation.CHANGEMENT_ETAT_LINGE)
+                .personnelId(agent.getId()).typeOperation(TypeOperation.CHANGEMENT_ETAT_LINGE)
                 .dateOperation(LocalDateTime.now()).observations(observations).build();
         historiqueLingeRepository.save(h);
         return linge;
@@ -272,8 +280,8 @@ public class LingeService {
                         .id(h.getId())
                         .lingeId(h.getLinge().getId())
                         .codeLinge(h.getLinge().getCodeBarre())
-                        .agentId(h.getAgent().getId())
-                        .agentNom(h.getAgent().getNom())
+                        .agentId(h.getPersonnelId())
+                        //.agentNom(h.getAgent().getNom())
                         .etatId(h.getLinge().getEtat())
                         .etatapres(h.getEtatApres())
                         .dateOperation(h.getDateOperation())

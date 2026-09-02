@@ -3,6 +3,8 @@ package tn.softsys.buanderie.service.Process;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
+import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
 import tn.softsys.buanderie.dto.Lot.LotScanResponse;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
@@ -29,6 +31,7 @@ public class CycleSechageService {
     private final LingeRepository            lingeRepository;
     private final HistoriqueLingeRepository  historiqueLingeRepository;
     private final NotificationService        notificationService;
+    private final SqlServerPersonnelRepository sqlPersonnelRepo;
 
 
     public LotScanResponse scanLot(String codeLot) {
@@ -58,9 +61,9 @@ public class CycleSechageService {
                                     String matriculeAgent,
                                     Double poidsCharge) {
 
-        Agent agent = agentRepository.findByMatricule(matriculeAgent)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Agent", "matricule", matriculeAgent));
+        Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                        "Agent", "matricule", matriculeAgent));
 
         Machine machine = machineRepo.findByCode(codeMachine);
         if (machine == null)
@@ -106,7 +109,7 @@ public class CycleSechageService {
         CycleSechage cycle = cycleRepo.save(CycleSechage.builder()
                 .machine(machine)
                 .programmeSechage(programme)
-                .agent(agent)
+               // .agent(agent)
                 .poidsCharge(poidsCharge)
                 .dateDebut(LocalDateTime.now())
                 .statut(StatutCycle.EN_COURS)
@@ -120,7 +123,7 @@ public class CycleSechageService {
                     .linge(linge)
                     .etatAvant(ancien)
                     .etatApres(EtatLinge.EN_SECHAGE)
-                    .agent(agent)
+                    .personnelId(agent.getId())
                     .typeOperation(TypeOperation.DEMARRAGE_SECHAGE)
                     .dateOperation(LocalDateTime.now())
                     .observations("Passage en séchage — cycle " + cycle.getNumeroCycle()
@@ -173,7 +176,7 @@ public class CycleSechageService {
             linge.setEtat(EtatLinge.EN_SECHAGE);
             historiqueLingeRepository.save(HistoriqueLinge.builder()
                     .linge(linge).etatAvant(ancien).etatApres(EtatLinge.EN_SECHAGE)
-                    .agent(cycle.getAgent())
+                    //.agent(cycle.getAgent())
                     .typeOperation(TypeOperation.DEMARRAGE_SECHAGE)
                     .dateOperation(LocalDateTime.now())
                     .observations("Ajout lot au cycle " + cycle.getNumeroCycle())
@@ -207,20 +210,19 @@ public class CycleSechageService {
         machine.setEtat(Machine.EtatMachine.DISPONIBLE);
         machineRepo.save(machine);
 
-        // Pour chaque lot du cycle → linges EN_SECHAGE → SECHE
         List<CycleSechageItem> items = itemRepo.findByCycleSechage(cycle);
 
         for (CycleSechageItem item : items) {
             Lot lot = lotRepo.findById(item.getSourceId())
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Lot", "id", item.getSourceId()));
-
+            lot.setEtat(EtatLot.EN_TRI);
             List<Linge> linges = lingeRepository.findByLot_CodeLot(lot.getCodeLot());
 
             for (Linge linge : linges) {
                 EtatLinge ancien = linge.getEtat();
                 linge.setEtat(EtatLinge.SECHE);
-                linge.setLot(null); // libéré du lot
+                linge.setLot(null);
 
                 // Notification fin de vie si besoin
                 if (linge.getDureVie() != null
@@ -232,7 +234,7 @@ public class CycleSechageService {
                         .linge(linge)
                         .etatAvant(ancien)
                         .etatApres(EtatLinge.SECHE)
-                        .agent(cycle.getAgent())
+                        //.agent(cycle.getAgent())
                         .typeOperation(TypeOperation.FIN_SECHAGE)
                         .dateOperation(LocalDateTime.now())
                         .observations("Fin séchage — cycle " + cycle.getNumeroCycle()

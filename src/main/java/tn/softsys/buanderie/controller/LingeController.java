@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
@@ -23,7 +24,7 @@ public class LingeController {
     private final LingeService lingeService;
     private final CollecteServiceService collecteService;
 
-
+    @PreAuthorize("hasAuthority('LIG1305')")
     @Operation(summary = "Récupérer les linges avec pagination et filtres")
     @GetMapping("/paged")
     public Page<LingeDTO> getLingesPaged(

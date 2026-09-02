@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -21,10 +20,11 @@ public class Distribution {
 
     private LocalDateTime dateDistribution;
 
-    @ManyToOne
-    private Agent agent;
 
-@Column(name = "ServiceId")
+    @Column(name = "personnel_id")
+    private Long personnelId;
+
+    @Column(name = "ServiceId")
     private Long serviceId;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -33,6 +33,7 @@ public class Distribution {
 
     @OneToMany(mappedBy = "distribution")
     private List<DistributionItem> items;
+
     @PrePersist
     protected void onCreate() {
         if (this.dateDistribution == null) {

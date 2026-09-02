@@ -72,7 +72,7 @@ public class CollecteResumeService {
 
         return ResumeCollecteDTO.builder()
                 .collecteId(collecte.getId())
-                .agent(collecte.getAgent().getNom())
+              //  .agent(collecte.getAgent().getNom())
                 .serviceId(collecte.getService())
                 .categories(categories)
                 .totalPieces(total)

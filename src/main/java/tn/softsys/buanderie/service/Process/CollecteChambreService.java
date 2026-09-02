@@ -30,31 +30,194 @@ public class CollecteChambreService {
     private final SqlServerChambreRepository sqlChambreRepo;
     private final SqlServerLitRepository     sqlLitRepo;
     private final SqlServerSejourRepository  sqlSejourRepo;
+    private final SqlServerPersonnelRepository  personnelReo;
 
-    public Map<String, Object> ouvrirChambre(String codeBarre, String matriculeAgent) {
-        Agent agent = find(matriculeAgent);
-        Chambre chambre = sqlChambreRepo.findByCodeBarre(codeBarre)
-                .orElseThrow(() -> new BusinessException("Chambre introuvable : " + codeBarre));
-        Set<Long> infectes = sqlSejourRepo.findLitsInfectes().stream().map(Lit::getId).collect(Collectors.toSet());
-        List<Lit> lits = sqlLitRepo.findByChambreId(chambre.getId(), PageRequest.of(0, 50)).getContent();
-        List<Map<String,Object>> litsDto = lits.stream().map(lit -> {
-            List<Linge> lg = lingeRepo.findByLitIdSqlServerInAndEtat(List.of(lit.getId()), EtatLinge.LIVRE);
-            lg.forEach(l -> { if (l.getStatutCollecte()==StatutCollecteLinge.PROPRE){l.setStatutCollecte(null);lingeRepo.save(l);}});
-            return Map.<String,Object>of("litId",lit.getId(),"codeLit",s(lit.getCode()),
-                    "estInfecte",infectes.contains(lit.getId()),"nbLinges",lg.size(),
-                    "linges",lg.stream().map(l->Map.<String,Object>of("lingeId",l.getId(),
-                            "codeBarre",l.getCodeBarre(),"rfid",s(l.getRfidTag()),
-                            "categorie",l.getCategorie().name(),"statut","")).collect(Collectors.toList()));
-        }).filter(m->(int)m.get("nbLinges")>0).collect(Collectors.toList());
-        if (litsDto.isEmpty()) throw new BusinessException("Aucun linge LIVRE — chambre "+chambre.getCode());
-        int nb = litsDto.stream().mapToInt(m->(int)m.get("nbLinges")).sum();
-        Collecte c = collecteRepo.save(Collecte.builder().agent(agent)
-                .chambreIdSqlServer(chambre.getId()).codeChambre(chambre.getCode())
-                .typeCollecte(TypeCollecte.MIXTE).etatCollecte(EtatCollecte.EN_TRAITEMENT)
-                        .service(chambre.getService().getId())
-                .nbAttendus(nb).numeroCollecte("CH-"+System.currentTimeMillis()).build());
-        return Map.of("collecteId",c.getId(),"codeChambre",chambre.getCode(),
-                "nbLits",litsDto.size(),"nbLinges",nb,"lits",litsDto);
+    public Map<String, Object> ouvrirChambre(
+            String codeBarre,
+            String matriculeAgent) {
+
+
+
+        Personnel personnel = find(matriculeAgent);
+
+        Long personnelId = personnel.getId();
+
+
+
+        Chambre chambre = sqlChambreRepo
+                .findByCodeBarre(codeBarre)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                "Chambre introuvable : " + codeBarre
+                        )
+                );
+
+
+
+        Set<Long> infectes =
+                sqlSejourRepo.findLitsInfectes()
+                        .stream()
+                        .map(Lit::getId)
+                        .collect(Collectors.toSet());
+
+
+
+
+        List<Lit> lits =
+                sqlLitRepo.findByChambreId(
+                        chambre.getId(),
+                        PageRequest.of(0, 50)
+                ).getContent();
+
+
+
+
+        List<Map<String, Object>> litsDto =
+                lits.stream()
+                        .map(lit -> {
+
+                            List<Linge> lg =
+                                    lingeRepo
+                                            .findByLitIdSqlServerInAndEtat(
+                                                    List.of(lit.getId()),
+                                                    EtatLinge.LIVRE
+                                            );
+
+                            lg.forEach(l -> {
+
+                                if (l.getStatutCollecte()
+                                        == StatutCollecteLinge.PROPRE) {
+
+                                    l.setStatutCollecte(null);
+                                    lingeRepo.save(l);
+                                }
+                            });
+
+                            return Map.<String, Object>of(
+                                    "litId",
+                                    lit.getId(),
+
+                                    "codeLit",
+                                    s(lit.getCode()),
+
+                                    "estInfecte",
+                                    infectes.contains(lit.getId()),
+
+                                    "nbLinges",
+                                    lg.size(),
+
+                                    "linges",
+                                    lg.stream()
+                                            .map(l ->
+                                                    Map.<String, Object>of(
+                                                            "lingeId",
+                                                            l.getId(),
+
+                                                            "codeBarre",
+                                                            l.getCodeBarre(),
+
+                                                            "rfid",
+                                                            s(l.getRfidTag()),
+
+                                                            "categorie",
+                                                            l.getCategorie().name(),
+
+                                                            "statut",
+                                                            ""
+                                                    )
+                                            )
+                                            .collect(Collectors.toList())
+                            );
+
+                        })
+                        .filter(m ->
+                                (int) m.get("nbLinges") > 0
+                        )
+                        .collect(Collectors.toList());
+
+
+
+
+        if (litsDto.isEmpty()) {
+
+            throw new BusinessException(
+                    "Aucun linge LIVRE — chambre "
+                            + chambre.getCode()
+            );
+        }
+
+
+
+        int nb =
+                litsDto.stream()
+                        .mapToInt(m ->
+                                (int) m.get("nbLinges")
+                        )
+                        .sum();
+
+
+
+
+        Collecte c =
+                collecteRepo.save(
+                        Collecte.builder()
+
+                                // ID provenant de SQL Server
+                                .personnelId(personnelId)
+
+                                // ID chambre SQL Server
+                                .chambreIdSqlServer(
+                                        chambre.getId()
+                                )
+
+                                .codeChambre(
+                                        chambre.getCode()
+                                )
+
+                                .typeCollecte(
+                                        TypeCollecte.MIXTE
+                                )
+
+                                .etatCollecte(
+                                        EtatCollecte.EN_TRAITEMENT
+                                )
+
+                                .service(
+                                        chambre.getService().getId()
+                                )
+
+                                .nbAttendus(nb)
+
+                                .numeroCollecte(
+                                        "CH-"
+                                                + System.currentTimeMillis()
+                                )
+
+                                .build()
+                );
+
+
+
+
+        return Map.of(
+                "collecteId",
+                c.getId(),
+
+                "personnelId",
+                personnelId,
+
+                "codeChambre",
+                chambre.getCode(),
+
+                "nbLits",
+                litsDto.size(),
+
+                "nbLinges",
+                nb,
+
+                "lits",
+                litsDto
+        );
     }
 
     @Transactional
@@ -78,7 +241,9 @@ public class CollecteChambreService {
             collecteLingeRepo.save(CollecteLinge.builder().collecte(c).linge(l).typeCollecte(tc)
                     .numeroSacInfecte(inf?bac.getCode():null).dateScan(LocalDateTime.now()).build());
             historiqueRepo.save(HistoriqueLinge.builder().linge(l).etatAvant(av).etatApres(ne)
-                    .agent(c.getAgent()).typeOperation(inf?TypeOperation.DECLARATION_SAC_INFECTE:TypeOperation.COLLECTE)
+                    .personnelId(c.getPersonnelId())
+
+                    .typeOperation(inf?TypeOperation.DECLARATION_SAC_INFECTE:TypeOperation.COLLECTE)
                     .dateOperation(LocalDateTime.now()).collecte(c)
                     .observations((inf?"INFECTE":"BLANC")+" lit="+litId+" bac="+bac.getCode()).build());
             codes.add(l.getCodeBarre());
@@ -104,7 +269,11 @@ public class CollecteChambreService {
         collecteLingeRepo.save(CollecteLinge.builder().collecte(c).linge(l)
                 .typeCollecte(TypeCollecte.MANQUANT).dateScan(LocalDateTime.now()).build());
         historiqueRepo.save(HistoriqueLinge.builder().linge(l).etatAvant(av).etatApres(EtatLinge.MANQUANT)
-                .agent(c.getAgent()).typeOperation(TypeOperation.CHANGEMENT_ETAT_LINGE)
+              //  .agent(c.getAgent())
+                .personnelId(c.getPersonnelId())
+
+                        .
+                typeOperation(TypeOperation.CHANGEMENT_ETAT_LINGE)
                 .dateOperation(LocalDateTime.now()).collecte(c).observations("Manquant ch="+c.getCodeChambre()).build());
         return Map.of("lingeId",lingeId,"statut","MANQUANT");
     }
@@ -123,7 +292,7 @@ public class CollecteChambreService {
                 "nbBlancs",b,"nbInfectes",i,"nbPropres",p,"nbManquants",m);
     }
 
-    private Agent    find(String m)    {return agentRepo.findByMatricule(m).orElseThrow(()->new ResourceNotFoundException("Agent","matricule",m));}
+    private Personnel    find(String m)    {return personnelReo.findByCodeBarre(m);}
     private Collecte findC(Long id)    {return collecteRepo.findById(id).orElseThrow(()->new ResourceNotFoundException("Collecte","id",id));}
     private Linge    findL(String c)   {return lingeRepo.findByCodeBarre(c).or(()->lingeRepo.findByBarcodeOrRfid(c)).orElseThrow(()->new ResourceNotFoundException("Linge","code",c));}
     private boolean  done(Long c,Long l){return collecteLingeRepo.existsByCollecte_IdAndLinge_Id(c,l);}

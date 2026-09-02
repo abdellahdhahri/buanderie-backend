@@ -82,33 +82,33 @@ public class BacService {
         return bacRepository.save(bac);
     }
 
-    private void changerEtatLingesDuBac(
-            Bac bac,
-            EtatLinge nouvelEtat,
-            Agent agent,
-            String observations) {
-
-        for (Linge linge : bac.getLinges()) {
-
-            EtatLinge ancienEtat = linge.getEtat();
-
-            linge.setEtat(nouvelEtat);
-
-            lingeRepository.save(linge);
-
-            HistoriqueLinge historique = HistoriqueLinge.builder()
-                    .linge(linge)
-                    .etatAvant(ancienEtat)
-                    .etatApres(nouvelEtat)
-                    .agent(agent)
-                    .typeOperation(TypeOperation.CHANGEMENT_ETAT_LINGE)
-                    .dateOperation(LocalDateTime.now())
-                    .observations(observations)
-                    .build();
-
-            historiqueLingeRepository.save(historique);
-        }
-    }
+//    private void changerEtatLingesDuBac(
+//            Bac bac,
+//            EtatLinge nouvelEtat,
+//            Agent agent,
+//            String observations) {
+//
+//        for (Linge linge : bac.getLinges()) {
+//
+//            EtatLinge ancienEtat = linge.getEtat();
+//
+//            linge.setEtat(nouvelEtat);
+//
+//            lingeRepository.save(linge);
+//
+//            HistoriqueLinge historique = HistoriqueLinge.builder()
+//                    .linge(linge)
+//                    .etatAvant(ancienEtat)
+//                    .etatApres(nouvelEtat)
+//                    .agent(agent)
+//                    .typeOperation(TypeOperation.CHANGEMENT_ETAT_LINGE)
+//                    .dateOperation(LocalDateTime.now())
+//                    .observations(observations)
+//                    .build();
+//
+//            historiqueLingeRepository.save(historique);
+//        }
+//    }
 //    public List<Bac> getBacsByService(Long serviceId) {
 //        return bacRepository.findByService_Id(serviceId);
 //    }

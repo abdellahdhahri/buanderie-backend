@@ -26,10 +26,12 @@ public class ChambreController {
     public ChambreDTO getChambreById(@PathVariable Long id) {
         return chambreService.getChambreById(id);
     }
-@GetMapping("/code/{code}")
-public ChambreDTO getChambreByCodeBarre(String code){
+    @GetMapping("/code/{code}")
+    public ChambreDTO getChambreByCodeBarre(
+            @PathVariable("code") String code) {
+
         return chambreService.getChambreByCodeBarre(code);
-}
+    }
     @GetMapping("/service/{serviceId}")
     public Page<ChambreDTO> getChambresByServiceId(
             @PathVariable Long serviceId,

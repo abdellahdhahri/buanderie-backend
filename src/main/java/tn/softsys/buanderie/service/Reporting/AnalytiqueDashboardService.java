@@ -1,4 +1,4 @@
-package tn.softsys.buanderie.service.management;
+package tn.softsys.buanderie.service.Reporting;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -13,17 +13,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * AnalytiqueDashboardService
- *
- * Fournit toutes les données du tableau de bord :
- *   - KPIs globaux
- *   - Distribution des états (pipeline)
- *   - Stock par service
- *   - Alertes actives (4 types)
- *   - Machines (cycles + poids du jour)
- *   - Agents actifs aujourd'hui
- */
+
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)

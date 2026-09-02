@@ -23,13 +23,13 @@ public class RemiseLingeController {
     @PostMapping
     public ResponseEntity<RemiseLinge> creerRemise(
             @RequestParam String matriculeAgentRemise,
-            @RequestParam String matriculeAgentCollecte
+            @RequestParam Long id
     ) {
 
         RemiseLinge remise =
                 remiseLingeService.creerRemise(
                         matriculeAgentRemise,
-                        matriculeAgentCollecte
+                        id
                 );
 
         return ResponseEntity

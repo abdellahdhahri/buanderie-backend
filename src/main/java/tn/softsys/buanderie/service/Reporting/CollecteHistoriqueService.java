@@ -38,8 +38,8 @@ public class CollecteHistoriqueService {
                 .collect(Collectors.toList());
     }
 
-    public List<CollecteListeDTO> getCollectesParAgent(String matricule) {
-        return collecteRepo.findByAgent_Matricule(matricule).stream()
+    public List<CollecteListeDTO> getCollectesParAgent(Long id) {
+        return collecteRepo.findByPersonnelId(id).stream()
                 .sorted((a, b) -> {
                     if (a.getDateCollecte() == null) return 1;
                     if (b.getDateCollecte() == null) return -1;
@@ -123,9 +123,9 @@ public class CollecteHistoriqueService {
                 .numeroCollecte(c.getNumeroCollecte())
                 .typeCollecte(c.getTypeCollecte() != null ? c.getTypeCollecte().name() : null)
                 .etatCollecte(c.getEtatCollecte() != null ? c.getEtatCollecte().name() : null)
-                .agentMatricule(c.getAgent() != null ? c.getAgent().getMatricule() : null)
-                .agentNom(c.getAgent() != null
-                        ? c.getAgent().getNom() + " " + c.getAgent().getPrenom() : null)
+            //    .agentMatricule(c.getAgent() != null ? c.getAgent().getMatricule() : null)
+             //   .agentNom(c.getAgent() != null
+                     //   ? c.getAgent().getNom() + " " + c.getAgent().getPrenom() : null)
                 .serviceId(c.getService())
                 .serviceCode(serviceCode)
                 .chambreIdSqlServer(c.getChambreIdSqlServer())
@@ -159,9 +159,9 @@ public class CollecteHistoriqueService {
                 .numeroCollecte(c.getNumeroCollecte())
                 .typeCollecte(c.getTypeCollecte() != null ? c.getTypeCollecte().name() : null)
                 .etatCollecte(c.getEtatCollecte() != null ? c.getEtatCollecte().name() : null)
-                .agentMatricule(c.getAgent() != null ? c.getAgent().getMatricule() : null)
-                .agentNom(c.getAgent() != null
-                        ? c.getAgent().getNom() + " " + c.getAgent().getPrenom() : null)
+               // .agentMatricule(c.getAgent() != null ? c.getAgent().getMatricule() : null)
+                //.agentNom(c.getAgent() != null
+                  //      ? c.getAgent().getNom() + " " + c.getAgent().getPrenom() : null)
                 .serviceId(c.getService())
                 .serviceCode(serviceCode)
                 .codeChambre(c.getCodeChambre())

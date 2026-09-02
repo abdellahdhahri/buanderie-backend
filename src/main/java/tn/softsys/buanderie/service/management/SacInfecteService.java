@@ -3,7 +3,9 @@ package tn.softsys.buanderie.service.management;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerServiceRepository;
+import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
 import tn.softsys.buanderie.dto.SacsInfectes.AffectationLingesPropresRequest;
 import tn.softsys.buanderie.dto.SacsInfectes.SacInfecteDTO;
 import tn.softsys.buanderie.dto.SacsInfectes.SacInfecteItemRequest;
@@ -42,6 +44,7 @@ public class SacInfecteService {
     private final CycleLavageItemRepository cycleLavageItemRepository;
     private final CycleLavageService cycleLavageService;
 
+    private final SqlServerPersonnelRepository sqlPersonnelRepo;
 
 
     public SacInfecte creerSac(SacInfecteDTO sacInfecteDTO){
@@ -229,8 +232,8 @@ public class SacInfecteService {
         if (request.getCodesLinges() == null || request.getCodesLinges().isEmpty())
             throw new BusinessException("Aucun code-barre fourni.");
 
-        Agent agent = agentRepository.findByMatricule(request.getMatriculeAgent())
-                .orElseThrow(() -> new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent()));
+        Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
+//                .orElseThrow(() -> new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent()));
 
         Collecte collecte = sac.getCollecte();
 
@@ -279,7 +282,7 @@ public class SacInfecteService {
                     .linge(linge)
                     .etatAvant(etatAvant)
                     .etatApres(EtatLinge.LAVE)
-                    .agent(agent)
+                    .personnelId(agent.getId())
                     .typeOperation(TypeOperation.LAVAGE_SAC_INFECTE)
                     .dateOperation(LocalDateTime.now())
                     .collecte(collecte)
@@ -296,7 +299,7 @@ public class SacInfecteService {
 
         sac.setEtat(EtatSac.LINGES_AFFECTES);
         sac.setDateAffectationPropres(LocalDateTime.now());
-        sac.setAgentAffectation(agent);
+       // sac.setAgentAffectation(agent);
         sacInfecteRepository.save(sac);
         return toDTO(sac);
     }

@@ -3,6 +3,8 @@ package tn.softsys.buanderie.service.Process;
 import jakarta.transaction.Transactional;
 import lombok.*;
 import org.springframework.stereotype.Service;
+import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
+import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
 import tn.softsys.buanderie.dto.Reception.ReceptionRFIDRequest;
 import tn.softsys.buanderie.dto.Reception.ReceptionRequest;
 import tn.softsys.buanderie.dto.SacsInfectes.SacInfecteDTO;
@@ -25,12 +27,17 @@ public class ReceptionService {
     private final HistoriqueLingeRepository historiqueLingeRepository;
     private final ServiceRepository serviceRepository;
     private final SacInfecteService sacInfecteService;
-     //Réception unifiée : bacs blancs + sacs infectés.
-     // Bacs blancs  : vérification classique linge à linge
-      //Sacs infectés : réceptionné sans ouverture, numéro enregistré
-    @Transactional
-    public ReceptionResultDTO recevoirPlusieurs(ReceptionRequest request, Agent agent) {
+    private final SqlServerPersonnelRepository sqlPersonnelRepo;
 
+
+
+
+
+    @Transactional
+    public ReceptionResultDTO recevoirPlusieurs(ReceptionRequest request, String code ) {
+
+
+        Personnel agent = sqlPersonnelRepo.findByCodeBarre(code);
         List<ReceptionBac> bacsRecus = new ArrayList<>();
         List<SacInfecteDTO> sacsRecus = new ArrayList<>();
         //  Réception des bacs blancs
@@ -44,7 +51,7 @@ public class ReceptionService {
                         .codeBac(bac.getCode())
                         //.service(bac.getService())
                         .typeCollecte(bac.getTypeCollecte())
-                        .agent(agent)
+                       // .agent(agent)
                         .dateReception(LocalDateTime.now())
                         .build();
                 reception = receptionRepo.save(reception);
@@ -66,7 +73,7 @@ public class ReceptionService {
                                     .linge(linge)
                                     .etatApres(EtatLinge.RECEPTION)
                                     .etatAvant(etatAvant)
-                                    .agent(agent)
+                                    .personnelId(agent.getId())
                                     .typeOperation(TypeOperation.RECEPTION_BAC)
                                     .dateOperation(LocalDateTime.now())
                                     .observations("Réception bac " + bac.getCode())
@@ -79,7 +86,7 @@ public class ReceptionService {
         if (request.getNumerosSacsInfectes() != null && !request.getNumerosSacsInfectes().isEmpty()) {
 
             for (String numeroSac : request.getNumerosSacsInfectes()) {
-                SacInfecteDTO sacDTO = sacInfecteService.recevoirSacInfecte(numeroSac, agent.getMatricule());
+                SacInfecteDTO sacDTO = sacInfecteService.recevoirSacInfecte(numeroSac, agent.getCodeBarre());
                 sacsRecus.add(sacDTO);
             }
         }
@@ -88,7 +95,8 @@ public class ReceptionService {
     }
     //methode de reception en mode RFID
     @Transactional
-    public ReceptionRFIDResultDTO recevoirRFID(ReceptionRFIDRequest request, Agent agent) {
+    public ReceptionRFIDResultDTO recevoirRFID(ReceptionRFIDRequest request, String code) {
+        Personnel agent = sqlPersonnelRepo.findByCodeBarre(code);
 
         Bac bac = bacRepository.findByCode(request.getCodeBac())
                 .orElseThrow(() -> new RuntimeException("Bac introuvable"));
@@ -126,7 +134,7 @@ public class ReceptionService {
                             .linge(linge)
                             .etatAvant(ancien)
                             .etatApres(EtatLinge.RECEPTION)
-                            .agent(agent)
+                            .personnelId(agent.getId())
                             .typeOperation(TypeOperation.RECEPTION_BAC)
                             .dateOperation(LocalDateTime.now())
                             .observations("RFID portique bac " + bac.getCode())

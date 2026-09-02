@@ -3,6 +3,8 @@ package tn.softsys.buanderie.service.Process;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
+import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
 import tn.softsys.buanderie.dto.PliageRequest;
 import tn.softsys.buanderie.entity.Agent;
 import tn.softsys.buanderie.entity.HistoriqueLinge;
@@ -27,16 +29,17 @@ public class PliageService {
     private final LingeRepository lingeRepository;
     private final AgentRepository agentRepository;
     private final HistoriqueLingeRepository historiqueRepository;
+    private final SqlServerPersonnelRepository sqlPersonnelRepo;
 
     @Transactional
     public Linge plier(PliageRequest request) {
 
-        Agent agent = agentRepository.findByMatricule(request.getMatriculeAgent())
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Agent",
-                                "matricule",
-                                request.getMatriculeAgent()));
+        Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
+//                .orElseThrow(() ->
+//                        new ResourceNotFoundException(
+//                                "Agent",
+//                                "matricule",
+//                                request.getMatriculeAgent()));
 
         Linge linge = rechercherLinge(request.getCodeOuTag());
 
@@ -53,7 +56,7 @@ public class PliageService {
 
         creerHistorique(
                 linge,
-                agent,
+                agent.getId(),
                 ancienEtat,
                 EtatLinge.PLIE,
                 "Pliage"
@@ -83,7 +86,7 @@ public class PliageService {
 
     private void creerHistorique(
             Linge linge,
-            Agent agent,
+            Long personnelId ,
             EtatLinge avant,
             EtatLinge apres,
             String observation) {
@@ -92,7 +95,7 @@ public class PliageService {
 
                 HistoriqueLinge.builder()
                         .linge(linge)
-                        .agent(agent)
+                        .personnelId(personnelId)
                         .etatAvant(avant)
                         .etatApres(apres)
                         .typeOperation(TypeOperation.PLIAGE)

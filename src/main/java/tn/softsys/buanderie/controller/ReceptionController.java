@@ -3,6 +3,8 @@ package tn.softsys.buanderie.controller;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
+import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
 import tn.softsys.buanderie.dto.Reception.ReceptionRFIDRequest;
 import tn.softsys.buanderie.dto.Reception.ReceptionRequest;
 import tn.softsys.buanderie.entity.Agent;
@@ -17,20 +19,21 @@ public class ReceptionController {
 
     private final ReceptionService service;
     private final AgentRepository agentRepository;
+    private final  SqlServerPersonnelRepository personnelRepo;
 
     @PostMapping
     public ResponseEntity<ReceptionResultDTO> recevoir(
             @RequestBody ReceptionRequest request,
             @RequestParam String matricule) {
 
-        Agent agent = agentRepository.findByMatricule(matricule)
-                .orElseThrow(() -> new RuntimeException("Agent introuvable : " + matricule));
+        Personnel agent = personnelRepo.findByCodeBarre(matricule);
+//                .orElseThrow(() -> new RuntimeException("Agent introuvable : " + matricule));
 
-        ReceptionResultDTO result = service.recevoirPlusieurs(request, agent);
+        ReceptionResultDTO result = service.recevoirPlusieurs(request, matricule);
         return ResponseEntity.ok(result);
     }
 
-    @PostMapping("/receptionRfid")
+   /* @PostMapping("/receptionRfid")
     public ResponseEntity<ReceptionService.ReceptionRFIDResultDTO> recevoirRfid(@RequestBody ReceptionRFIDRequest request
                                                                                ){
         Agent agent = agentRepository.findByMatricule(request.getMatriculeAgent())
@@ -39,7 +42,7 @@ public class ReceptionController {
         return ResponseEntity.ok(result);
 
     }
-
+*/
 
    /* @PostMapping("/receptionne-rfid")
     public ResponseEntity<String> scannerRFID(@RequestBody RFIDScanRequest request) {

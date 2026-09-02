@@ -2,6 +2,8 @@ package tn.softsys.buanderie.service.Process;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
+import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
 import tn.softsys.buanderie.dto.ReclamationRequest;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
@@ -20,20 +22,22 @@ public class ReclamationService {
     private final ReclamationRepository reclamationRepository;
     private final HistoriqueLingeRepository historiqueRepository;
     private final NotificationService notificationService;
+    private final SqlServerPersonnelRepository sqlPersonnelRepo;
+
 
 
     @Transactional
     public Reclamation creer(ReclamationRequest request) {
 
-        Agent agent = agentRepository
-                .findByMatricule(request.getMatriculeAgent())
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Agent",
-                                "matricule",
-                                request.getMatriculeAgent()
-                        )
-                );
+        Personnel agent = sqlPersonnelRepo
+                .findByCodeBarre(request.getMatriculeAgent());
+//                .orElseThrow(() ->
+//                        new ResourceNotFoundException(
+//                                "Agent",
+//                                "matricule",
+//                                request.getMatriculeAgent()
+//                        )
+//                );
 
         Linge linge = lingeRepository
                 .findByCodeBarre(request.getCodeOuTag())
@@ -56,7 +60,7 @@ public class ReclamationService {
 
         Reclamation reclamation = Reclamation.builder()
                 .linge(linge)
-                .agent(agent)
+             //   .agent(agent)
                 .type(request.getType())
                 .dateCreation(LocalDateTime.now())
                 .status(Reclamation.StatutReclamation.EN_COURS)
@@ -98,7 +102,7 @@ public class ReclamationService {
                 .linge(linge)
                 .etatAvant(ancienEtat)
                 .etatApres(nouvelEtat)
-                .agent(agent)
+                .personnelId(agent.getId())
                 .typeOperation(TypeOperation.CHANGEMENT_ETAT_LINGE)
                 .dateOperation(LocalDateTime.now())
                 .observations(observations)

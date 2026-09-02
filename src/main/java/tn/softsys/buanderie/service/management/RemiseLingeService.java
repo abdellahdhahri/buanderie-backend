@@ -45,7 +45,7 @@ public class RemiseLingeService {
     @Transactional
     public RemiseLinge creerRemise(
             String matriculeAgentRemise,
-            String matriculeAgentCollecte
+            Long  id
     ) {
 
 
@@ -65,15 +65,15 @@ public class RemiseLingeService {
 
         Collecte collecte =
                 collecteRepository
-                        .findFirstByAgent_MatriculeAndEtatCollecteNotOrderByDateCollecteDesc(
-                                matriculeAgentCollecte,
+                        .findFirstByPersonnelIdAndEtatCollecteNotOrderByDateCollecteDesc(
+                                id,
                                 EtatCollecte.CLOTUREE
                         )
                         .orElseThrow(() ->
                                 new ResourceNotFoundException(
                                         "Collecte non clôturée",
                                         "matricule agent",
-                                        matriculeAgentCollecte
+                                        id
                                 )
                         );
 

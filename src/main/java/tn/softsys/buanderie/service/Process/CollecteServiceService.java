@@ -3,7 +3,9 @@ package tn.softsys.buanderie.service.Process;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerServiceRepository;
+import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
 import tn.softsys.buanderie.dto.SacsInfectes.*;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
@@ -30,71 +32,170 @@ public class CollecteServiceService {
     private final HistoriqueLingeRepository      historiqueRepo;
     private final SacInfecteRepository           sacInfecteRepo;
     private final SacInfecteService              sacInfecteService;
+    private final SqlServerPersonnelRepository personnelReo;
 
 
-    public Map<String, Object> ouvrirService(String matriculeAgent,
-                                             Long   serviceId,
-                                             String refOuCode) {
-        Agent agent = agentRepo.findByMatricule(matriculeAgent)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Agent", "matricule", matriculeAgent));
+    public Map<String, Object> ouvrirService(
+            String matriculeAgent,
+            Long serviceId,
+            String refOuCode) {
+
+        // ============================================
+        // 1. Récupérer le Personnel depuis SQL Server
+        // ============================================
+
+        Personnel personnel = personnelReo.findByCodeBarre(matriculeAgent);
+
+        if (personnel == null) {
+            throw new ResourceNotFoundException(
+                    "Personnel",
+                    "codeBarre",
+                    matriculeAgent
+            );
+        }
+
+        Long personnelId = personnel.getId();
+
+
+
 
         tn.softsys.buanderie.Sqlserver.sqlServerEntities.Service svc = null;
+
         if (serviceId != null) {
             svc = sqlServiceRepo.findById(serviceId).orElse(null);
         }
-        if (svc == null && refOuCode != null) {
+
+        if (svc == null && refOuCode != null && !refOuCode.isBlank()) {
+
             svc = sqlServiceRepo.findByReference(refOuCode);
-            if (svc == null) svc = sqlServiceRepo.findByCode(refOuCode);
+
+            if (svc == null) {
+                svc = sqlServiceRepo.findByCode(refOuCode);
+            }
         }
-        if (svc == null)
-            throw new BusinessException("Service introuvable (id=" + serviceId
-                    + ", ref=" + refOuCode + ")");
 
-        // Linges LIVRE de ce service
-        List<Linge> attendus = lingeRepo.findByServiceIdAndEtat(
-                svc.getId(), EtatLinge.LIVRE);
+        if (svc == null) {
+            throw new BusinessException(
+                    "Service introuvable (id=" + serviceId
+                            + ", ref=" + refOuCode + ")"
+            );
+        }
 
-        // Reset statutCollecte PROPRE de la session précédente
+
+
+
+        List<Linge> attendus =
+                lingeRepo.findByServiceIdAndEtat(
+                        svc.getId(),
+                        EtatLinge.LIVRE
+                );
+
+
+
         attendus.forEach(l -> {
-            if (l.getStatutCollecte() == StatutCollecteLinge.PROPRE) {
+
+            if (l.getStatutCollecte()
+                    == StatutCollecteLinge.PROPRE) {
+
                 l.setStatutCollecte(null);
                 lingeRepo.save(l);
             }
         });
 
-        if (attendus.isEmpty())
+
+
+        if (attendus.isEmpty()) {
             throw new BusinessException(
                     "Aucun linge LIVRE pour le service ["
-                            + svc.getCode() + "]. Impossible d'ouvrir une collecte.");
+                            + svc.getCode()
+                            + "]. Impossible d'ouvrir une collecte."
+            );
+        }
 
-        Collecte collecte = collecteRepo.save(Collecte.builder()
-                .agent(agent)
-                .service(svc.getId())
-                .typeCollecte(TypeCollecte.MIXTE)
-                .etatCollecte(EtatCollecte.EN_TRAITEMENT)
-                .nbAttendus(attendus.size())
-                        .service(svc.getId())
 
-                .numeroCollecte("SVC-" + System.currentTimeMillis())
-                .build());
 
-        List<Map<String, Object>> lingesDto = attendus.stream()
-                .map(l -> Map.<String, Object>of(
-                        "lingeId",   l.getId(),
-                        "codeBarre", l.getCodeBarre(),
-                        "rfid",      l.getRfidTag() != null ? l.getRfidTag() : "",
-                        "categorie", l.getCategorie().name(),
-                        "statut",    ""
-                )).collect(Collectors.toList());
+
+        Collecte collecte =
+                collecteRepo.save(
+                        Collecte.builder()
+
+                                // ID du Personnel SQL Server
+                                .personnelId(personnelId)
+
+                                // ID du service SQL Server
+                                .service(svc.getId())
+
+                                .typeCollecte(
+                                        TypeCollecte.MIXTE
+                                )
+
+                                .etatCollecte(
+                                        EtatCollecte.EN_TRAITEMENT
+                                )
+
+                                .nbAttendus(
+                                        attendus.size()
+                                )
+
+                                .numeroCollecte(
+                                        "SVC-"
+                                                + System.currentTimeMillis()
+                                )
+
+                                .build()
+                );
+
+
+
+
+        List<Map<String, Object>> lingesDto =
+                attendus.stream()
+                        .map(l ->
+                                Map.<String, Object>of(
+                                        "lingeId",
+                                        l.getId(),
+
+                                        "codeBarre",
+                                        l.getCodeBarre(),
+
+                                        "rfid",
+                                        l.getRfidTag() != null
+                                                ? l.getRfidTag()
+                                                : "",
+
+                                        "categorie",
+                                        l.getCategorie().name(),
+
+                                        "statut",
+                                        ""
+                                )
+                        )
+                        .collect(Collectors.toList());
+
 
         return Map.of(
-                "collecteId",  collecte.getId(),
-                "serviceId",   svc.getId(),
-                "serviceCode", svc.getCode(),
-                "serviceRef",  svc.getReference() != null ? svc.getReference() : "",
-                "nbAttendus",  attendus.size(),
-                "linges",      lingesDto
+                "collecteId",
+                collecte.getId(),
+
+                "personnelId",
+                personnelId,
+
+                "serviceId",
+                svc.getId(),
+
+                "serviceCode",
+                svc.getCode(),
+
+                "serviceRef",
+                svc.getReference() != null
+                        ? svc.getReference()
+                        : "",
+
+                "nbAttendus",
+                attendus.size(),
+
+                "linges",
+                lingesDto
         );
     }
 
@@ -162,7 +263,7 @@ public class CollecteServiceService {
 
         historiqueRepo.save(HistoriqueLinge.builder()
                 .linge(l).etatAvant(ancien).etatApres(EtatLinge.COLLECTE)
-                .agent(c.getAgent())
+               // .agent(c.getAgent())
                 .typeOperation(TypeOperation.COLLECTE)
                 .dateOperation(LocalDateTime.now()).collecte(c)
                 .observations("BLANC bac=" + bac.getCode()
@@ -233,7 +334,7 @@ public class CollecteServiceService {
                 .build());
         historiqueRepo.save(HistoriqueLinge.builder()
                 .linge(l).etatAvant(ancien).etatApres(EtatLinge.MANQUANT)
-                .agent(c.getAgent())
+                //.agent(c.getAgent())
                 .typeOperation(TypeOperation.CHANGEMENT_ETAT_LINGE)
                 .dateOperation(LocalDateTime.now()).collecte(c)
                 .observations("Manquant svcId=" + c.getService())

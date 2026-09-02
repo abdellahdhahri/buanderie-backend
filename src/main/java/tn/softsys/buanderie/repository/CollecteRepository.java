@@ -16,10 +16,8 @@ import java.util.Optional;
 public interface CollecteRepository extends JpaRepository<Collecte, Long> {
     Optional<Collecte> findTopByServiceOrderByDateCollecteDesc(ServiceEntity service);
     Optional<Collecte> findFirstByServiceAndEtatCollecteNotOrderByDateCollecteAsc(Long serviceId, EtatCollecte etat);
-    List<Collecte> findByAgent_MatriculeOrderByDateCollecteDesc(String matricule);
-
-    List<Collecte> findByAgent_Matricule(String matricule);
-
+    List<Collecte> findByPersonnelIdOrderByDateCollecteDesc(Long personnelId);
+    List<Collecte> findByPersonnelId(Long personnelId);
     List<Collecte> findByService(Long serviceId);
 
     List<Collecte> findByEtatCollecte(EtatCollecte etat);
@@ -29,8 +27,8 @@ public interface CollecteRepository extends JpaRepository<Collecte, Long> {
     @Query("SELECT c FROM Collecte c WHERE c.dateCollecte BETWEEN :debut AND :fin ORDER BY c.dateCollecte DESC")
     List<Collecte> findByPeriode(@Param("debut") LocalDateTime debut,
                                  @Param("fin")   LocalDateTime fin);
-    Optional<Collecte> findFirstByAgent_MatriculeAndEtatCollecteNotOrderByDateCollecteDesc(
-            String matricule,
+    Optional<Collecte> findFirstByPersonnelIdAndEtatCollecteNotOrderByDateCollecteDesc(
+            Long personnelId,
             EtatCollecte etatCollecte
     );
 

@@ -36,8 +36,8 @@ public class Collecte {
 
     private String numeroCollecte;
 
-    @ManyToOne
-    private Agent agent;
+    @Column(name = "personnel_id")
+    private Long personnelId;
 
     private Long service;
 

@@ -27,6 +27,7 @@ public class AffectationLitService {
     private final SqlServerChambreRepository sqlChambreRepo;
     private final SqlServerLitRepository     sqlLitRepo;
     private final SqlServerSejourRepository  sqlSejourRepo;
+    private SqlServerPersonnelRepository sqlPersonnelRepo;
 
     public Map<String, Object> scanChambre(String codeBarre, String matriculeAgent) {
         agentRepo.findByMatricule(matriculeAgent)
@@ -78,8 +79,8 @@ public class AffectationLitService {
     @Transactional
     public Map<String, Object> affecterLinge(Long litId, Long chambreId,
                                               String codeOuTag, String matriculeAgent) {
-        Agent agent = agentRepo.findByMatricule(matriculeAgent)
-                .orElseThrow(() -> new ResourceNotFoundException("Agent","matricule",matriculeAgent));
+        Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+//                .orElseThrow(() -> new ResourceNotFoundException("Agent","matricule",matriculeAgent));
 
         Linge linge = lingeRepo.findByCodeBarre(codeOuTag)
                 .or(() -> lingeRepo.findByBarcodeOrRfid(codeOuTag))
@@ -91,7 +92,6 @@ public class AffectationLitService {
         if (linge.getLitIdSqlServer() != null)
             throw new BusinessException("Linge déjà affecté au lit " + linge.getLitIdSqlServer());
 
-        // ✅ PIVOT RÉTABLI — ferme la boucle collecte ↔ distribution
         linge.setLitIdSqlServer(litId);
         linge.setChambreIdSqlServer(chambreId);
         linge.setStatutCollecte(null); // prêt pour prochaine collecte
@@ -101,7 +101,7 @@ public class AffectationLitService {
                 .linge(linge)
                 .etatAvant(EtatLinge.LIVRE)
                 .etatApres(EtatLinge.LIVRE)
-                .agent(agent)
+                .personnelId(agent.getId())
                 .typeOperation(TypeOperation.LIVRAISON)
                 .dateOperation(LocalDateTime.now())
                 .observations("Affecté lit=" + litId + " chambre=" + chambreId)

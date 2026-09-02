@@ -42,8 +42,8 @@ public class CollecteHistoriqueController {
 
     @GetMapping("/agent/{matricule}")
     public ResponseEntity<List<CollecteListeDTO>> getParAgent(
-            @PathVariable String matricule) {
-        return ResponseEntity.ok(service.getCollectesParAgent(matricule));
+            @PathVariable Long id) {
+        return ResponseEntity.ok(service.getCollectesParAgent(id));
     }
 
     @GetMapping("/service/{serviceId}")
