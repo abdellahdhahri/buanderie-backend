@@ -16,6 +16,7 @@ import tn.softsys.buanderie.service.Reporting.NotificationService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -69,16 +70,26 @@ public class CycleLavageService {
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
 //                .orElseThrow(() -> new ResourceNotFoundException("AGENT", "matriculeAgent", matriculeAgent));
 
-        Machine machine = machineRepo.findByCode(codeMachine);
-               //.orElseThrow(() -> new ResourceNotFoundException("Machine", "code", codeMachine));
-        Lot lot = lotRepo.findByCodeLot(codeLot)
-                .orElseThrow(() -> new ResourceNotFoundException("Lot", "code", codeLot));
 
-        //  controle capacité machine
-        if (poidsCharge > machine.getCapaciteKg()) {
+        Machine machine = machineRepo.findByCode(codeMachine);
+        if (machine == null) {
+            throw new ResourceNotFoundException("Machine", "code", codeMachine);
+        }
+
+        Lot lot = lotRepo.findByCodeLot(codeLot)
+                .orElseThrow(
+                        () -> new ResourceNotFoundException(
+                                "Lot", "code", codeLot
+                        )
+                );
+
+        if (machine.getCapaciteKg() != null
+                && poidsCharge > machine.getCapaciteKg()) {
+
             throw new RuntimeException("Capacité machine insuffisante");
         }
-        if(machine.getEtat() != Machine.EtatMachine.DISPONIBLE){
+
+        if (machine.getEtatImmobilisation() != EtatImmobilisation.DISPONIBLE) {
             throw new RuntimeException("Machine indisponible");
 
         }
@@ -124,7 +135,7 @@ public class CycleLavageService {
         mettreLingesEnLavage(codeLot);
         addLotToCycleInternal(cycle, lot, poidsCharge);
         //viderLot(lot);
-        machine.setEtat(Machine.EtatMachine.EN_COURS);
+        machine.setEtatImmobilisation(EtatImmobilisation.EN_COURS);
         lot.setEtat(EtatLot.EN_LAVAGE);
        // lot.setPoidsActuel(0.0);
         return cycle;
@@ -259,8 +270,7 @@ public class CycleLavageService {
             }
         }
 
-        // La machine est maintenant disponible
-        machine.setEtat(Machine.EtatMachine.DISPONIBLE);
+        machine.setEtatImmobilisation(EtatImmobilisation.DISPONIBLE);
         machineRepo.save(machine);
 
         return cycleRepo.save(cycle);
@@ -384,7 +394,7 @@ public class CycleLavageService {
         }
 
         // Machine
-        Machine machine = machineRepo.findByCode(codeMachine);
+    Machine machine = machineRepo.findByCode(codeMachine);
 
         if (machine == null) {
             throw new ResourceNotFoundException(
@@ -394,7 +404,7 @@ public class CycleLavageService {
             );
         }
 
-        if (machine.getEtat() != Machine.EtatMachine.DISPONIBLE) {
+        if (machine.getEtatImmobilisation() != EtatImmobilisation.DISPONIBLE) {
             throw new BusinessException(
                     "La machine " + codeMachine +
                             " n'est pas disponible."
@@ -433,7 +443,7 @@ public class CycleLavageService {
         itemRepo.save(item);
 
         // Machine occupée
-        machine.setEtat(Machine.EtatMachine.EN_COURS);
+        machine.setEtatImmobilisation(EtatImmobilisation.EN_COURS);
         machineRepo.save(machine);
 
         // Sac en lavage

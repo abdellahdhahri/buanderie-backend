@@ -26,7 +26,7 @@ public class Arsenal {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "LotArticle_ImmobilistationID")
 
-    private Machine machine;
+    private Article article;
 }
 
 

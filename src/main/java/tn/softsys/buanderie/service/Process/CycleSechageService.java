@@ -76,9 +76,9 @@ public class CycleSechageService {
                     "La machine [" + codeMachine + "] n'est pas un séchoir. "
                     + "Type actuel : " + machine.getType());
 
-        if (machine.getEtat() != Machine.EtatMachine.DISPONIBLE)
+        if (machine.getEtatImmobilisation() != EtatImmobilisation.DISPONIBLE)
             throw new BusinessException(
-                    "Machine indisponible — état : " + machine.getEtat());
+                    "Machine indisponible — état : " + machine.getEtatImmobilisation());
 
         Lot lot = lotRepo.findByCodeLot(codeLot)
                 .orElseThrow(() -> new ResourceNotFoundException("Lot", "code", codeLot));
@@ -136,7 +136,7 @@ public class CycleSechageService {
         addLotToCycleInternal(cycle, lot, poidsCharge);
 
         // Marquer machine EN_COURS
-        machine.setEtat(Machine.EtatMachine.EN_COURS);
+        machine.setEtatImmobilisation(EtatImmobilisation.EN_COURS);
         machineRepo.save(machine);
 
         lot.setPoidsActuel(0.0);
@@ -207,7 +207,7 @@ public class CycleSechageService {
 
         // Libérer la machine
         Machine machine = cycle.getMachine();
-        machine.setEtat(Machine.EtatMachine.DISPONIBLE);
+        machine.setEtatImmobilisation(EtatImmobilisation.DISPONIBLE.DISPONIBLE);
         machineRepo.save(machine);
 
         List<CycleSechageItem> items = itemRepo.findByCycleSechage(cycle);

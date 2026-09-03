@@ -86,7 +86,7 @@ public class AnalytiqueDashboardService {
 
         long enCours = machines.stream()
                 .filter(m -> "EN_COURS".equals(
-                        m.getEtat() != null ? m.getEtat().name() : "")).count();
+                        m.getEtatImmobilisation() != null ? m.getEtatImmobilisation().name() : "")).count();
         double tauxMachines = machines.isEmpty() ? 0
                 : round((double) enCours / machines.size() * 100);
 
@@ -354,7 +354,7 @@ public class AnalytiqueDashboardService {
                     mp.put("id",                     m.getId());
                     mp.put("code",                   m.getCode());
                     mp.put("type",                   m.getType() != null ? m.getType().name() : null);
-                    mp.put("etat",                   m.getEtat() != null ? m.getEtat().name() : null);
+                    mp.put("etat",                   m.getEtatImmobilisation() != null ? m.getEtatImmobilisation().name() : null);
                     mp.put("capaciteKg",             m.getCapaciteKg());
                     mp.put("cyclesAujourdhui",       (int) cycles);
                     mp.put("poidsTraiteAujourdhui",  round(poids));

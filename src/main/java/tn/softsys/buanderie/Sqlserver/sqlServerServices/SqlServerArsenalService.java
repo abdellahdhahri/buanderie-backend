@@ -37,8 +37,8 @@ public class SqlServerArsenalService {
                 .id(arsenal.getId())
                 .categorie(arsenal.getCategorie())
                 .LotArticle_ImmobilistationID(
-                        arsenal.getMachine() != null
-                                ? arsenal.getMachine().getId()
+                        arsenal.getArticle() != null
+                                ? arsenal.getArticle().getId()
                                 : null
                 )
                 .build();

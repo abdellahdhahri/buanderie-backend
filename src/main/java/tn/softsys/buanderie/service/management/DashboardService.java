@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tn.softsys.buanderie.dto.DashboardDTO;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.EtatBac;
+import tn.softsys.buanderie.entity.enums.EtatImmobilisation;
 import tn.softsys.buanderie.entity.enums.TypeReclamation;
 import tn.softsys.buanderie.repository.*;
 
@@ -34,9 +35,22 @@ public class DashboardService {
 
         // Machines
         List<Machine> machines = machineRepository.findAll();
-        long machinesDisponibles = machines.stream().filter(m -> m.getEtat() == Machine.EtatMachine.DISPONIBLE).count();
-        long machinesEnCours = machines.stream().filter(m -> m.getEtat() == Machine.EtatMachine.EN_COURS).count();
-        long machinesEnMaintenance = machines.stream().filter(m -> m.getEtat() == Machine.EtatMachine.EN_MAINTENANCE).count();
+
+        long machinesDisponibles = machines.stream()
+                .filter(m -> m.getEtatImmobilisation() == EtatImmobilisation.DISPONIBLE)
+                .count();
+
+        long machinesEnCours = machines.stream()
+                .filter(m -> m.getEtatImmobilisation() == EtatImmobilisation.EN_COURS)
+                .count();
+
+        long machinesVendu = machines.stream()
+                .filter(m -> m.getEtatImmobilisation() == EtatImmobilisation.VENDU)
+                .count();
+
+        long machinesPerdues = machines.stream()
+                .filter(m -> m.getEtatImmobilisation() == EtatImmobilisation.PERDU)
+                .count();
 
         // Réclamations
       //  long reclamationsOuvertes = reclamationRepository.findByStatut(Reclamation.StatutReclamation.OUVERTE).size();
@@ -85,7 +99,7 @@ public class DashboardService {
                 .bacsTotaux(tousBacs.size())
                 .machinesDisponibles(machinesDisponibles)
                 .machinesEnCours(machinesEnCours)
-                .machinesEnMaintenance(machinesEnMaintenance)
+               // .machinesEnMaintenance(mac)
               //  .reclamationsOuvertes(reclamationsOuvertes)
                 .reclamationsUrgentes(reclamationsUrgentes)
                 .activiteAgents(activiteAgents)

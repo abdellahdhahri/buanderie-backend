@@ -203,7 +203,7 @@ public class SacInfecteService {
             CycleLavage cycle = sac.getCycleLavage();
             cycle.setStatut(StatutCycle.TERMINE);
             cycle.setDateFin(LocalDateTime.now());
-            cycle.getMachine().setEtat(Machine.EtatMachine.DISPONIBLE);
+            cycle.getMachine().setEtatImmobilisation(EtatImmobilisation.DISPONIBLE);
             machineRepository.save(cycle.getMachine());
             cycleLavageRepository.save(cycle);
         }
