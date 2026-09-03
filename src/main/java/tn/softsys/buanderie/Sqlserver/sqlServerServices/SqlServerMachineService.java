@@ -6,9 +6,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerMachineRepository;
 import tn.softsys.buanderie.Sqlserver.dtos.MachineDTO;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Machine;
-
-import java.util.Optional;
+import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Article;
 
 @Service("sqlServerMachineService")
 @RequiredArgsConstructor
@@ -23,18 +21,18 @@ public class SqlServerMachineService {
     }
 
     public MachineDTO getMachineById(Long id) {
-        Machine machine = machineRepository.findById(id)
+        Article article = machineRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Machine SQL Server introuvable"));
-        return mapToDTO(machine);
+        return mapToDTO(article);
     }
 
 
-    private MachineDTO mapToDTO(Machine machine) {
+    private MachineDTO mapToDTO(Article article) {
         return MachineDTO.builder()
-                .id(machine.getId())
-                .designation(machine.getDesignation())
-                .codeBarre(machine.getCodeBarre())
-                .articleFamilleId(machine.getArticleFamilleId())
+                .id(article.getId())
+                .articleFamilleId(article.getArticleFamilleId())
+               // .codeBarre(article.get())
+                .articleFamilleId(article.getArticleFamilleId())
                 .build();
     }
 }

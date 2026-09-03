@@ -15,22 +15,12 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 @Schema(description = "Entité représentant les machines / immobilisations de SQL Server")
-public class Machine {
+public class Article {
     @Id
     @Column(name = "ID")
     private Long id;
 
-    @Column(name = "Designation")
-    private String designation;
-    @Column(name = "CodeBarre")
-    private String codeBarre;
-
     @Column(name = "ArticleFamilleID")
     private Long articleFamilleId;
-
-    @Column(name = "Marque")
-    private String marque;
-    @Column(name = "Code")
-    private String code;
 
 }
