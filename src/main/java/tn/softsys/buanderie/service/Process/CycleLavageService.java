@@ -62,6 +62,7 @@ public class CycleLavageService {
 
 
 
+
     @Transactional
     public CycleLavage startCycle(String codeMachine,
                                   String codeLot,

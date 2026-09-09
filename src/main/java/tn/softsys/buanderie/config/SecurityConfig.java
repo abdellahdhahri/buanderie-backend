@@ -53,6 +53,12 @@
                             .requestMatchers(
                                     "/api/auth/login/**"
                             ).permitAll()
+                                    .requestMatchers(
+                                            "/api/**"
+                                    ).permitAll()
+                                    .requestMatchers(
+                                            "/api/linges/**"
+                                    ).permitAll()
                             .requestMatchers(
                                     "/api/bacs/**"
                             ).permitAll()
@@ -65,6 +71,14 @@
                             .requestMatchers(
                                     "/api/**"
                             ).permitAll()
+                                    .requestMatchers(
+                                            "/api/lots/**"
+                                    ).permitAll()
+
+                                    .requestMatchers(
+                                            "/Arsenals/**"
+                                    ).permitAll()
+
 
                             // Tout le reste nécessite une authentification
                            // .anyRequest().authenticated()

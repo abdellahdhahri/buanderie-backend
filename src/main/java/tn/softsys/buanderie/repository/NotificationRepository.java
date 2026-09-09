@@ -13,4 +13,8 @@ public interface NotificationRepository extends JpaRepository<Notification,Long>
     List<Notification> findAllByOrderByDateCreationDesc();
 
     List<Notification> findByLueFalseOrderByDateCreationDesc();
+    boolean existsByLingeIdAndTypeAndLueFalse(
+            Long lingeId,
+            String type
+    );
 }

@@ -97,11 +97,11 @@ public class NotificationService {
 
     private void envoyer(Notification notification) {
 
-        // 1. Sauvegarde en base
+        // Sauvegarde en base
         Notification saved =
                 notificationRepository.save(notification);
 
-        // 2. Préparer DTO pour WebSocket
+        //  Préparer DTO pour WebSocket
         NotificationDTO dto = new NotificationDTO(
                 saved.getTitre(),
                 saved.getMessage(),
@@ -117,6 +117,44 @@ public class NotificationService {
                 "/topic/notifications",
                 dto
         );
+    }
+
+    public void notifierLingeBloque(Linge linge, long joursBloque) {
+
+        boolean dejaNotifie =
+                notificationRepository
+                        .existsByLingeIdAndTypeAndLueFalse(
+                                linge.getId(),
+                                "LINGE_BLOQUE"
+                        );
+
+        if (dejaNotifie) {
+            return;
+        }
+
+        Notification notification = Notification.builder()
+                .titre("Linge bloqué")
+                .message(
+                        "Le linge " + linge.getCodeBarre()
+                                + " est bloqué en "
+                                + linge.getEtat().name()
+                                + " depuis "
+                                + joursBloque
+                                + " jours."
+                )
+                .type("LINGE_BLOQUE")
+                .dateCreation(LocalDateTime.now())
+                .lingeId(linge.getId())
+                .codeBarre(linge.getCodeBarre())
+                .categorie(
+                        linge.getCategorie() != null
+                                ? linge.getCategorie().name()
+                                : null
+                )
+                .lue(false)
+                .build();
+
+        envoyer(notification);
     }
     @Transactional
     public Notification lire(Long id) {

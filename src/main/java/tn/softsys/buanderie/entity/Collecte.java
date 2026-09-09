@@ -9,19 +9,7 @@ import lombok.*;
 import tn.softsys.buanderie.entity.enums.EtatCollecte;
 import tn.softsys.buanderie.entity.enums.TypeCollecte;
 
-/**
- * Collecte — version enrichie.
- *
- * Modifications par rapport à l'existant :
- *   + session       → FK CollecteSession (regroupement multi-chambres)
- *   + litIdSqlServer    → ID lit SQL Server ciblé
- *   + chambreIdSqlServer→ ID chambre SQL Server ciblée
- *   + nbAttendus    → nb linges attendus (depuis distribution)
- *   + nbScannésBlanc→ nb blancs scannés
- *   + nbPropres     → nb déclarés propres
- *   + nbInfectésPrésumés → déduits automatiquement
- *   + nbManquants   → confirmés manquants par l'agent
- */
+
 @Entity
 @Table(name = "collectes")
 @Data

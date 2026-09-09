@@ -43,9 +43,9 @@ public class DistributionService {
     public Map<String, Object> scanChambrePourDistribution(
             String codeBarre, String matriculeAgent) {
 
-        agentRepo.findByMatricule(matriculeAgent)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Agent", "matricule", matriculeAgent));
+        sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                        "Agent", "matricule", matriculeAgent));
 
         Chambre chambre = sqlChambreRepo.findByCodeBarre(codeBarre)
                 .orElseThrow(() -> new BusinessException(
@@ -241,9 +241,9 @@ public class DistributionService {
 
     public Map<String, Object> getUniformesPourPersonnel(String codeBadge,
                                                          String matriculeAgent) {
-        agentRepo.findByMatricule(matriculeAgent)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Agent", "matricule", matriculeAgent));
+        sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                        "Agent", "matricule", matriculeAgent));
 
         Personnel p = sqlPersonnelRepo.findByCodeBarre(codeBadge);
         if (p == null)

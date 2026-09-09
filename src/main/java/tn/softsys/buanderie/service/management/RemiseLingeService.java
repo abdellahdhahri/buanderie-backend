@@ -4,7 +4,9 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerServiceRepository;
+import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
 import tn.softsys.buanderie.dto.Collectes.ResumeCollecteDTO;
 import tn.softsys.buanderie.dto.ResumeCategorieDTO;
 import tn.softsys.buanderie.dto.StatutCategorieDTO;
@@ -36,11 +38,11 @@ public class RemiseLingeService {
     private final LingeRepository lingeRepository;
     private final AgentRepository agentRepository;
     private final SqlServerServiceRepository serviceRepository;
+    private final SqlServerPersonnelRepository personnelRepository;
 
     private final CollecteResumeService collecteService;
 
 
-    // CREER UNE REMISE
 
     @Transactional
     public RemiseLinge creerRemise(
@@ -49,17 +51,16 @@ public class RemiseLingeService {
     ) {
 
 
-        Agent agentRemise =
-                agentRepository
-                        .findByMatricule(matriculeAgentRemise)
-                        .orElseThrow(() ->
-                                new ResourceNotFoundException(
-                                        "Agent",
-                                        "matricule",
-                                        matriculeAgentRemise
-                                )
-                        );
+        Personnel personnelRemise =
+                personnelRepository.findByCodeBarre(matriculeAgentRemise);
 
+        if (personnelRemise == null) {
+            throw new ResourceNotFoundException(
+                    "Personnel",
+                    "codeBarre",
+                    matriculeAgentRemise
+            );
+        }
 
 
 
@@ -125,7 +126,7 @@ public class RemiseLingeService {
                 RemiseLinge.builder()
                         .collecte(collecte)
                         .service(service.get().getId())
-                        .agent(agentRemise)
+                       .personnelId(personnelRemise.getId())
                         .dateLivraison(LocalDateTime.now())
                         .etat(EtatLivraison.EN_COURS)
                         .build();
@@ -216,10 +217,10 @@ public class RemiseLingeService {
                                 collecteId,
                                 categorie
                         );
-
         return quantite == null
                 ? 0
                 : quantite;
+
     }
 
 
