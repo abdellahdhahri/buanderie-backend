@@ -34,10 +34,8 @@ public class RemiseLinge {
     @Column(name = "service_id", nullable = false)
     private Long service;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "agent_id", nullable = false)
-    private Agent agent;
-
+    @Column(name = "personnel_id", nullable = false)
+    private Long personnelId;
     private LocalDateTime dateLivraison;
 
     @Enumerated(EnumType.STRING)

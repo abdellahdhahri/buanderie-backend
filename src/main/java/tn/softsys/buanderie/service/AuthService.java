@@ -163,6 +163,7 @@ public class AuthService {
             );
         }
 
+        UserDTO currentUser = getCurrentUser(sessionId);
 
         String privilegesUrl =
                 UriComponentsBuilder
@@ -295,11 +296,11 @@ public class AuthService {
 
         return new LoginResponseDTO(
                 token,
-                login,
+                currentUser.getLogin(),
                 admin,
                 privileges,
-                null,
-                null
+                currentUser.getCodeBarre(),
+                currentUser
         );
     }
 
@@ -471,6 +472,86 @@ public class AuthService {
                 privileges,
                 codeBarreUser,
                 userDTO
+        );
+    }
+
+
+
+    //retourner l utilisateur connectée
+    private UserDTO getCurrentUser(String sessionId) {
+
+        String currentUserUrl =
+                baseUrl + "/Login/CurrentUser";
+
+        HttpHeaders headers = new HttpHeaders();
+
+        headers.add(
+                HttpHeaders.COOKIE,
+                "ASP.NET_SessionId=" + sessionId
+        );
+
+        HttpEntity<Void> request =
+                new HttpEntity<>(headers);
+
+        ResponseEntity<Map> response;
+
+        try {
+            response = restTemplate.exchange(
+                    currentUserUrl,
+                    HttpMethod.GET,
+                    request,
+                    Map.class
+            );
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "Impossible de récupérer l'utilisateur connecté ASP.NET",
+                    e
+            );
+        }
+
+        Map data = response.getBody();
+
+        if (data == null) {
+            throw new RuntimeException(
+                    "Réponse CurrentUser ASP.NET vide"
+            );
+        }
+
+        Long id = null;
+
+        if (data.get("id") != null) {
+            id = ((Number) data.get("id")).longValue();
+        }
+
+        String login =
+                data.get("login") != null
+                        ? data.get("login").toString()
+                        : null;
+
+        String nomPrenom =
+                data.get("nomPrenom") != null
+                        ? data.get("nomPrenom").toString()
+                        : null;
+
+        String codeBarre =
+                data.get("codeBarre") != null
+                        ? data.get("codeBarre").toString()
+                        : null;
+
+        Long serviceId = null;
+
+        if (data.get("serviceId") != null) {
+            serviceId =
+                    ((Number) data.get("serviceId")).longValue();
+        }
+
+        return new UserDTO(
+                id,
+                login,
+                nomPrenom,
+                codeBarre,
+                serviceId,
+                null
         );
     }
 }

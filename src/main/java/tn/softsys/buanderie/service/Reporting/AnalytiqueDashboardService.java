@@ -5,6 +5,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerServiceRepository;
+import tn.softsys.buanderie.entity.HistoriqueLinge;
+import tn.softsys.buanderie.entity.Linge;
 import tn.softsys.buanderie.entity.enums.*;
 import tn.softsys.buanderie.repository.*;
 
@@ -27,6 +29,7 @@ public class AnalytiqueDashboardService {
     private final SacInfecteRepository       sacInfecteRepo;
     private final HistoriqueLingeRepository  historiqueRepo;
     private final SqlServerServiceRepository sqlServiceRepo;
+    private final NotificationService notificationService;
 
     private static final int    SEUIL_CRITIQUE  = 3;
     private static final int    SEUIL_ATTENTION = 8;
@@ -224,7 +227,7 @@ public class AnalytiqueDashboardService {
                                 ? " — rupture ~" + s.get("joursAvantRupturePrevue") + "j" : "")))
                 .collect(Collectors.toList());
 
-        // B) Linges bloqués
+        //  Linges bloqués
         List<Map<String, Object>> alertesBloquees = new ArrayList<>();
         try {
             LocalDateTime seuil = LocalDateTime.now().minusDays(JOURS_BLOCAGE);
@@ -393,13 +396,78 @@ public class AnalytiqueDashboardService {
     // ─────────────────────────────────────────────────────────────────────
     @Scheduled(fixedDelay = 300_000)
     public void verifierAlertesCritiques() {
+
         try {
-            Map<String, Object> alertes = buildAlertes(lingeRepo.findAll());
-            int total = (int) alertes.get("totalAlertes");
-            if (total > 0) {
-                System.out.printf("[DASHBOARD] %d alerte(s) active(s)%n", total);
+
+            LocalDateTime seuil =
+                    LocalDateTime.now().minusDays(JOURS_BLOCAGE);
+
+            List<HistoriqueLinge> historiques =
+                    historiqueRepo.findHistoriquesBloqués(seuil);
+
+            Map<Long, HistoriqueLinge> parLinge =
+                    new LinkedHashMap<>();
+
+            for (HistoriqueLinge h : historiques) {
+
+                if (h.getLinge() == null) {
+                    continue;
+                }
+
+                Long lingeId = h.getLinge().getId();
+
+                // Le repository retourne normalement DESC
+                parLinge.putIfAbsent(lingeId, h);
             }
-        } catch (Exception ignored) {}
+
+            int notificationsEnvoyees = 0;
+
+            for (HistoriqueLinge h : parLinge.values()) {
+
+                Linge linge = h.getLinge();
+
+                // Vérifier que le linge est toujours bloqué
+                if (!estEtatBloque(linge.getEtat())) {
+                    continue;
+                }
+
+                long joursBloque =
+                        java.time.Duration
+                                .between(
+                                        h.getDateOperation(),
+                                        LocalDateTime.now()
+                                )
+                                .toDays();
+
+                notificationService.notifierLingeBloque(
+                        linge,
+                        joursBloque
+                );
+
+                notificationsEnvoyees++;
+            }
+
+            System.out.println(
+                    "[SMART] Vérification linges bloqués : "
+                            + notificationsEnvoyees
+                            + " linge(s)"
+            );
+
+        } catch (Exception e) {
+
+            System.err.println(
+                    "[SMART] Erreur vérification linges bloqués : "
+                            + e.getMessage()
+            );
+        }
+    }
+
+
+    private boolean estEtatBloque(EtatLinge etat) {
+
+        return etat == EtatLinge.COLLECTE
+                || etat == EtatLinge.RECEPTION
+                || etat == EtatLinge.EN_TRI;
     }
 
     // ─────────────────────────────────────────────────────────────────────

@@ -27,7 +27,9 @@ public interface LingeRepository extends JpaRepository<Linge, Long>, JpaSpecific
     List<Linge>     findByRfidTagIn(List<String> rfidTags);
     List<Linge> findByEmplacement_Id(Long arsenalId);
     List<Linge> findByLot_Id(Long lotId);
-
+    Optional<Linge> findByLegacyLotArticleImmobilisationId(
+            Long legacyLotArticleImmobilisationId
+    );
     List<Linge> findByLot_IdAndEtat(Long lotId, EtatLinge etat);
 
     @Query("SELECT l FROM Linge l WHERE l.codeBarre = :code OR l.rfidTag = :code")

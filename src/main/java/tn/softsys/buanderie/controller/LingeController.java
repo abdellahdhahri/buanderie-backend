@@ -3,6 +3,9 @@ import java.util.List;
 
 import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -11,8 +14,12 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.LingeImportRepository;
+import tn.softsys.buanderie.Sqlserver.projection.LingeImportableProjection;
+import tn.softsys.buanderie.Sqlserver.sqlServerServices.LingeImportService;
 import tn.softsys.buanderie.dto.Linge.AssocierRfidRequest;
 import tn.softsys.buanderie.dto.Historique.HistoriqueLingeDto;
+import tn.softsys.buanderie.dto.Linge.LingeImportRequest;
 import tn.softsys.buanderie.dto.LingeDTO;
 import tn.softsys.buanderie.entity.HistoriqueLinge;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
@@ -23,8 +30,11 @@ import tn.softsys.buanderie.service.management.LingeService;
 public class LingeController {
     private final LingeService lingeService;
     private final CollecteServiceService collecteService;
+    private final LingeImportRepository lingeImportRepository;
+    private final LingeImportService lingeImportService;
 
-    @PreAuthorize("hasAuthority('LIG1305')")
+
+   // @PreAuthorize("hasAuthority('LIG1305')")
     @Operation(summary = "Récupérer les linges avec pagination et filtres")
     @GetMapping("/paged")
     public Page<LingeDTO> getLingesPaged(
@@ -107,5 +117,50 @@ public class LingeController {
         return ResponseEntity.ok(
                 lingeService.associerTagRfid(request));
     }
+
+    @GetMapping("/a-importer")
+    public Page<LingeImportableProjection> getLingesAImporter(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by("id").ascending()
+        );
+
+        return lingeImportRepository.findLingesImportables(pageable);
+    }
+    @PostMapping("/import")
+    public ResponseEntity<?> importerLinges(
+            @RequestBody List<LingeImportRequest> requests) {
+
+        try {
+
+            List<Linge> linges =
+                    lingeImportService.importerLinges(requests);
+
+            return ResponseEntity.ok(linges);
+
+        } catch (RuntimeException e) {
+
+            return ResponseEntity
+                    .badRequest()
+                    .body(
+                            "Erreur import linges : "
+                                    + e.getMessage()
+                    );
+
+        } catch (Exception e) {
+
+            return ResponseEntity
+                    .internalServerError()
+                    .body(
+                            "Erreur interne : "
+                                    + e.getMessage()
+                    );
+        }
+    }
+
     @Data public static class ChangerEtatRequest { private EtatLinge etat; private String matriculeAgent; private String observations; }
 }

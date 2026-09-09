@@ -8,6 +8,7 @@ import tn.softsys.buanderie.Sqlserver.dtos.PersonnelDto;
 import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -17,6 +18,11 @@ public class PersonnelService {
 
     public List<Personnel> getAll(){
         return personnelRepository.findAll().stream().toList();
+
+    }
+
+    public Optional<Personnel>getById(Long id){
+       return personnelRepository.findById(id);
 
     }
 

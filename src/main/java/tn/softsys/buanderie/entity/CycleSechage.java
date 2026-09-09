@@ -34,10 +34,9 @@ public class CycleSechage {
     @JoinColumn(name = "programme_sechage_id")
     private ProgrammeSechage programmeSechage;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "agent_id", nullable = false)
-    private Agent agent;
 
+    @Column(name = "personnel_id", nullable = false)
+    private Long personnelId;
     @Column(name = "date_debut", nullable = false)
     private LocalDateTime dateDebut;
 

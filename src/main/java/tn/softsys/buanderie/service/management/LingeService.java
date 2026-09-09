@@ -49,46 +49,94 @@ public class LingeService {
     private final PersonnelService personnelService;
     private final SqlServerPersonnelRepository personnelRepository;
 
-    public Page<LingeDTO> getLingesPaged(int page, int size, String categorie, String etatStr, Long serviceId, String search) {
+    public Page<LingeDTO> getLingesPaged(
+            int page,
+            int size,
+            String categorie,
+            String etatStr,
+            Long serviceId,
+            String search
+    ) {
+
         Pageable pageable = PageRequest.of(
                 page,
                 size,
                 Sort.by(Sort.Direction.DESC, "dateCreation")
-
         );
 
         Specification<Linge> spec = (root, query, cb) -> {
+
             List<Predicate> predicates = new ArrayList<>();
+
+            // Filtre catégorie
             if (categorie != null && !categorie.trim().isEmpty()) {
-                predicates.add(cb.equal(cb.lower(root.get("categorie")), categorie.trim().toLowerCase()));
-            }
-            if (etatStr != null && !etatStr.trim().isEmpty()) {
-                try {
-                    EtatLinge etat = EtatLinge.valueOf(etatStr.trim().toUpperCase());
-                    predicates.add(cb.equal(root.get("etat"), etat));
-                } catch (IllegalArgumentException e) {
-                    // Ignorer en cas de chaîne invalide
-                }
-            }
-            if (serviceId != null) {
                 predicates.add(
-                        cb.equal(root.get("serviceId"), serviceId)
+                        cb.equal(
+                                cb.lower(root.get("categorie")),
+                                categorie.trim().toLowerCase()
+                        )
                 );
             }
-            if (search != null && !search.trim().isEmpty()) {
-                String searchPattern = "%" + search.trim().toLowerCase() + "%";
-                Predicate codePred = cb.like(cb.lower(root.get("codeSuivi")), searchPattern);
-                Predicate chambrePred = cb.like(cb.lower(root.get("chambre")), searchPattern);
 
-                Join<Linge, ServiceEntity> serviceJoin = root.join("service", JoinType.LEFT);
-                Predicate servicePred = cb.like(cb.lower(serviceJoin.get("nom")), searchPattern);
+            // Filtre état
+            if (etatStr != null && !etatStr.trim().isEmpty()) {
+                try {
+                    EtatLinge etat =
+                            EtatLinge.valueOf(etatStr.trim().toUpperCase());
 
-                predicates.add(cb.or(codePred, chambrePred, servicePred));
+                    predicates.add(
+                            cb.equal(root.get("etat"), etat)
+                    );
+
+                } catch (IllegalArgumentException e) {
+                    // État invalide
+                }
             }
-            return cb.and(predicates.toArray(new Predicate[0]));
+
+            // Filtre service ID
+            if (serviceId != null) {
+                predicates.add(
+                        cb.equal(
+                                root.get("serviceId"),
+                                serviceId
+                        )
+                );
+            }
+
+            // Recherche
+            if (search != null && !search.trim().isEmpty()) {
+
+                String searchPattern =
+                        "%" + search.trim().toLowerCase() + "%";
+
+                Predicate codeBarrePred =
+                        cb.like(
+                                cb.lower(root.get("codeBarre")),
+                                searchPattern
+                        );
+
+                Predicate designationPred =
+                        cb.like(
+                                cb.lower(root.get("designation")),
+                                searchPattern
+                        );
+
+                predicates.add(
+                        cb.or(
+                                codeBarrePred,
+                                designationPred
+                        )
+                );
+            }
+
+            return cb.and(
+                    predicates.toArray(new Predicate[0])
+            );
         };
 
-        return lingeRepository.findAll(spec, pageable).map(this::toDTO);
+        return lingeRepository
+                .findAll(spec, pageable)
+                .map(this::toDTO);
     }
 
     public List<Linge> findAll() {

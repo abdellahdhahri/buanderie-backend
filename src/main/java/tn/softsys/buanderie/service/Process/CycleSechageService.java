@@ -62,8 +62,11 @@ public class CycleSechageService {
                                     Double poidsCharge) {
 
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
-//                .orElseThrow(() -> new ResourceNotFoundException(
-//                        "Agent", "matricule", matriculeAgent));
+
+        if (agent == null) {
+            throw new ResourceNotFoundException(
+                    "Agent", "codeBarre", matriculeAgent);
+        }
 
         Machine machine = machineRepo.findByCode(codeMachine);
         if (machine == null)
@@ -106,14 +109,16 @@ public class CycleSechageService {
         ProgrammeSechage programme = suggestProgramme(lot.getCategorie());
 
         // Créer le cycle
-        CycleSechage cycle = cycleRepo.save(CycleSechage.builder()
-                .machine(machine)
-                .programmeSechage(programme)
-               // .agent(agent)
-                .poidsCharge(poidsCharge)
-                .dateDebut(LocalDateTime.now())
-                .statut(StatutCycle.EN_COURS)
-                .build());
+        CycleSechage cycle = cycleRepo.save(
+                CycleSechage.builder()
+                        .machine(machine)
+                        .programmeSechage(programme)
+                        .personnelId(agent.getId())
+                        .poidsCharge(poidsCharge)
+                        .dateDebut(LocalDateTime.now())
+                        .statut(StatutCycle.EN_COURS)
+                        .build()
+        );
 
         for (Linge linge : linges) {
             EtatLinge ancien = linge.getEtat();
