@@ -72,4 +72,26 @@ public interface HistoriqueLingeRepository extends JpaRepository<HistoriqueLinge
         ORDER BY h.dateOperation ASC
     """)
     List<HistoriqueLinge> findTrackingLinge(@Param("lingeId") Long lingeId);
+
+    @Query("""
+    SELECT h
+    FROM HistoriqueLinge h
+    WHERE h.linge IS NOT NULL
+      AND h.etatApres IS NOT NULL
+      AND h.dateOperation < :seuil
+    ORDER BY h.linge.id, h.dateOperation DESC
+""")
+    List<HistoriqueLinge> findHistoriquesAvantSeuil(
+            @Param("seuil") LocalDateTime seuil);
+
+    @Query("""
+    SELECT h
+    FROM HistoriqueLinge h
+    JOIN FETCH h.linge l
+    WHERE l.id IN :lingeIds
+    ORDER BY l.id ASC, h.dateOperation DESC
+""")
+    List<HistoriqueLinge> findHistoriqueByLingeIds(
+            @Param("lingeIds") List<Long> lingeIds
+    );
 }

@@ -174,6 +174,10 @@ public class Linge {
     private StatutCollecteLinge statutCollecte;
 
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sac_infecte_id")
+    @JsonIgnore
+    private SacInfecte sacInfecte;
 
     @PrePersist
     public void prePersist() {

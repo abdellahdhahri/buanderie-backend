@@ -6,7 +6,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import tn.softsys.buanderie.Sqlserver.dtos.AutoclaveLegacyDTO;
+import tn.softsys.buanderie.Sqlserver.dtos.MachineImportableProjectionDto;
 import tn.softsys.buanderie.Sqlserver.projection.LaveurImportableProjection;
+import tn.softsys.buanderie.Sqlserver.sqlServerServices.CubixImportClient;
 import tn.softsys.buanderie.Sqlserver.sqlServerServices.MachineImportService;
 import tn.softsys.buanderie.dto.MachineImportRequest;
 import tn.softsys.buanderie.entity.Machine;
@@ -20,6 +22,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class MachineController {
     private final MachineService machineService;
+    private final CubixImportClient cubixImportClient;
 
     private final MachineImportService machineImportService;
 
@@ -74,8 +77,8 @@ public class MachineController {
 //        return machineImportService.getLaveursImportables();
 //    }
     @GetMapping("/machinesAimporter")
-    public List<Object[]> machinesAimporter() {
-        return machineImportService.machinesAimporter();
+    public List<MachineImportableProjectionDto> machinesAimporter() {
+        return cubixImportClient.getMachines();
     }
 
     @PostMapping("/import")

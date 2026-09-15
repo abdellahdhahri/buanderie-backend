@@ -1,7 +1,5 @@
 package tn.softsys.buanderie.service.management;
 
-import jakarta.persistence.criteria.Join;
-import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -30,7 +28,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -283,7 +280,7 @@ public class LingeService {
 
         return lingeRepository.save(linge);
     }
-    public List<HistoriqueLinge> getHistorique() { return historiqueLingeRepository.findAll(); }
+    public Page<HistoriqueLinge> getHistorique(Pageable pageable) { return historiqueLingeRepository.findAll(pageable); }
 
 
     private LingeDTO toDTO(Linge linge) {

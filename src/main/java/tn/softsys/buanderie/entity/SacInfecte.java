@@ -31,9 +31,8 @@ public class SacInfecte {
 
     private String rfidcode ;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "agent_collecte_id", nullable = false)
-    private Agent agentCollecte;
+    @Column(name = "personnel_id", nullable = false)
+    private Long personnelId;
 
     @Column(name = "service_id", nullable = true)
     private Long serviceId;
@@ -93,7 +92,9 @@ public class SacInfecte {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "agent_affectation_id",nullable = true)
     private Agent agentAffectation;
-
+    @OneToMany(mappedBy = "sacInfecte", fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<Linge> linges = new ArrayList<>();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cycle_lavage_id")
@@ -102,10 +103,10 @@ public class SacInfecte {
     protected void onCreate() {
         if (this.dateCollecte == null) this.dateCollecte = LocalDateTime.now();
         if (this.numeroSac == null)
-            this.numeroSac = "SAC-INF-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+            this.numeroSac = "SAC-INF-" + UUID.randomUUID().toString().substring(0, 5).toUpperCase();
         if (this.etat == null) this.etat = EtatSac.DECLARE;
         if (this.rfidcode ==null)
-            this.rfidcode = "RF-SI-"+ UUID.randomUUID().toString().substring(0,7 ).toUpperCase();
+            this.rfidcode = "RF-SI-"+ UUID.randomUUID().toString().substring(0,5 ).toUpperCase();
     }
 
 }

@@ -54,4 +54,11 @@ public interface LingeRepository extends JpaRepository<Linge, Long>, JpaSpecific
             CategLinge categorie,
             EtatLinge etat
     );
+    long countByEtat(EtatLinge etat);
+
+    long countByCategorieAndEtat(
+            CategLinge categorie,
+            EtatLinge etat
+    );
+
 }

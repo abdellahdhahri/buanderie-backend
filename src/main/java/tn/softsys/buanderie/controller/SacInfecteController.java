@@ -70,7 +70,7 @@ public class SacInfecteController {
 
     //tous les sacs d'un agent
     @GetMapping("/agent")
-    public ResponseEntity<List<SacInfecteDTO>> getSacsParAgent(@RequestParam String matricule) {
+    public ResponseEntity<List<SacInfecteDTO>> getSacsParAgent(@RequestParam Long matricule) {
         return ResponseEntity.ok(sacInfecteService.getSacsParAgent(matricule));
     }
 

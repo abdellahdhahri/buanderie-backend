@@ -43,6 +43,7 @@ public class SacInfecteService {
     private final CycleLavageRepository  cycleLavageRepository;
     private final CycleLavageItemRepository cycleLavageItemRepository;
     private final CycleLavageService cycleLavageService;
+    private final SqlServerPersonnelRepository personnelRepository;
 
     private final SqlServerPersonnelRepository sqlPersonnelRepo;
 
@@ -69,8 +70,10 @@ public class SacInfecteService {
 
         if (request.getItems() == null || request.getItems().isEmpty())
             throw new BusinessException("Impossible de déclarer un sac vide.");
-        Agent agent = agentRepository.findByMatricule(request.getMatriculeAgent())
-                .orElseThrow(() -> new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent()));
+        Personnel agent = personnelRepository.findByCodeBarre(request.getMatriculeAgent());
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent());
+        }
 
         Optional<tn.softsys.buanderie.Sqlserver.sqlServerEntities.Service> service = serviceRepository.findById(request.getServiceId());
                // .orElseThrow(() -> new BusinessException("Service introuvable : " + request.getServiceId()));
@@ -81,7 +84,8 @@ public class SacInfecteService {
             throw new BusinessException("La quantité totale déclarée doit être > 0.");
         SacInfecte sac = SacInfecte.builder()
                 .collecte(collecte)
-                .agentCollecte(agent)
+               // .agentCollecte(agent)
+                .personnelId(agent.getId())
                 .serviceId(service.get().getId())
                 .chambre(request.getChambre())
                 .quantiteDeclaree(totalDeclare)
@@ -115,12 +119,14 @@ public class SacInfecteService {
         if (sac.getEtat() != EtatSac.DECLARE)
             throw new BusinessException("Le sac " + numeroSac + " est déjà en état : " + sac.getEtat());
 
-        Agent agent = agentRepository.findByMatricule(matriculeAgent)
-                .orElseThrow(() -> new ResourceNotFoundException("Agent", "matricule", matriculeAgent));
+        Personnel agent = personnelRepository.findByCodeBarre(matriculeAgent);
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
+        }
 
         sac.setEtat(EtatSac.RECEPTIONNE);
         sac.setDateReception(LocalDateTime.now());
-        sac.setAgentReception(agent);
+       // sac.setAgentReception(agent);
         sacInfecteRepository.save(sac);
         return toDTO(sac);
     }
@@ -176,8 +182,10 @@ public class SacInfecteService {
                 .orElseThrow(() -> new ResourceNotFoundException("SacInfecte", "numeroSac", request.getNumeroSac()));
         if (sac.getEtat() != EtatSac.EN_LAVAGE)
             throw new BusinessException("Le sac doit être EN_LAVAGE. État actuel : " + sac.getEtat());
-        Agent agent = agentRepository.findByMatricule(request.getMatriculeAgent())
-                .orElseThrow(() -> new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent()));
+        Personnel agent = personnelRepository.findByCodeBarre(request.getMatriculeAgent());
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent());
+        }
         int totalCompte = request.getItemsComptes().stream()
                 .mapToInt(VerificationLavageRequest.VerificationItemRequest::getQuantiteComptee).sum();
         List<SacInfecteItem> items = sac.getItems();
@@ -194,7 +202,8 @@ public class SacInfecteService {
         sac.setQuantiteCompteePostLavage(totalCompte);
         sac.setEcart(ecartGlobal);
         sac.setDateVerification(LocalDateTime.now());
-        sac.setAgentLavage(agent);
+     //   sac.setAgentLavage(agent);
+        sac.setPersonnelId(agent.getId());
         sac.setObservations((sac.getObservations() != null ? sac.getObservations() + " | " : "")
                 + (request.getObservations() != null ? request.getObservations() : ""));
         sac.setEtat(ecartGlobal == 0 ? EtatSac.VERIFIE : EtatSac.ECART_DETECTE);
@@ -259,7 +268,7 @@ public class SacInfecteService {
                     "Linge infecté lavé"
                             + " | Sac: " + sac.getNumeroSac()
                             + " | Collecte #" + (collecte != null ? collecte.getId() : "N/A")
-                            + " | Agent collecte: " + sac.getAgentCollecte().getMatricule()
+                            + " | Agent collecte: " + sac.getPersonnelId()
                             + " | Service: " + sac.getServiceId()
             );
             lingeRepository.save(linge);
@@ -291,7 +300,7 @@ public class SacInfecteService {
                             "Scan post-lavage infecté"
                                     + " | Sac: " + sac.getNumeroSac()
                                     + " | Collecte #" + (collecte != null ? collecte.getId() : "N/A")
-                                    + " | Agent collecte: " + sac.getAgentCollecte().getMatricule()
+                                    + " | Agent collecte: " + sac.getPersonnelId()
                     )
                     .build());
             sac.getLingesPropres().add(linge);
@@ -300,6 +309,7 @@ public class SacInfecteService {
         sac.setEtat(EtatSac.LINGES_AFFECTES);
         sac.setDateAffectationPropres(LocalDateTime.now());
        // sac.setAgentAffectation(agent);
+        sac.setPersonnelId(agent.getId());
         sacInfecteRepository.save(sac);
         return toDTO(sac);
     }
@@ -325,8 +335,8 @@ public class SacInfecteService {
         return sacInfecteRepository.findSacsAvecEcart().stream().map(this::toDTO).collect(Collectors.toList());
     }
 
-    public List<SacInfecteDTO> getSacsParAgent(String matricule) {
-        return sacInfecteRepository.findByAgentMatricule(matricule).stream().map(this::toDTO).collect(Collectors.toList());
+    public List<SacInfecteDTO> getSacsParAgent(Long matricule) {
+        return sacInfecteRepository.findByPersonnelId(matricule).stream().map(this::toDTO).collect(Collectors.toList());
     }
 
     public SacInfecteDTO getSacByNumero(String numeroSac) {
@@ -357,9 +367,10 @@ public class SacInfecteService {
                 .numeroSac(sac.getNumeroSac())
                 .etat(sac.getEtat())
                 .collecteId(sac.getCollecte() != null ? sac.getCollecte().getId() : null)
-                .agentCollecteNom(sac.getAgentCollecte() != null ? sac.getAgentCollecte().getNom() : null)
-                .agentCollecteMatricule(sac.getAgentCollecte() != null ? sac.getAgentCollecte().getMatricule() : null)
+               // .agentCollecteNom(sac.getAgentCollecte() != null ? sac.getAgentCollecte().getNom() : null)
+               // .agentCollecteMatricule(sac.getAgentCollecte() != null ? sac.getAgentCollecte().getMatricule() : null)
                // .serviceNom(sac.getService() != null ? sac.getService().getNom() : null)
+
                 .chambre(sac.getChambre())
                 .quantiteDeclaree(sac.getQuantiteDeclaree())
                 .quantiteCompteePostLavage(sac.getQuantiteCompteePostLavage())
@@ -379,4 +390,47 @@ public class SacInfecteService {
                         ? sac.getCycleLavage().getMachine().getCode() : null)
                 .build();
     }
+
+
+    public void ajouterLingeAuSac(
+            SacInfecte sac,
+            Linge linge) {
+
+        SacInfecteItem item =
+                sacInfecteItemRepository
+                        .findBySacInfecteAndCategorie(
+                                sac,
+                                linge.getCategorie()
+                        )
+                        .orElse(null);
+
+        if (item == null) {
+
+            item = SacInfecteItem.builder()
+                    .sacInfecte(sac)
+                    .categorie(linge.getCategorie())
+                    .quantiteDeclaree(1)
+                    .quantiteComptee(null)
+                    .ecart(null)
+                    .build();
+
+        } else {
+
+            item.setQuantiteDeclaree(
+                    item.getQuantiteDeclaree() + 1
+            );
+        }
+
+        sacInfecteItemRepository.save(item);
+
+        // quantité totale du sac
+        sac.setQuantiteDeclaree(
+                sac.getQuantiteDeclaree() == null
+                        ? 1
+                        : sac.getQuantiteDeclaree() + 1
+        );
+
+        sacInfecteRepository.save(sac);
+    }
+
 }

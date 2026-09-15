@@ -22,6 +22,7 @@ public interface SqlServerSejourRepository extends JpaRepository<Sejour, Long> {
              SELECT DISTINCT s.lit
                 FROM Sejour s
                 WHERE s.virus = 1
+                OR s.BMR =1
                 AND s.dateExit IS NULL
                 AND s.lit IS NOT NULL
      

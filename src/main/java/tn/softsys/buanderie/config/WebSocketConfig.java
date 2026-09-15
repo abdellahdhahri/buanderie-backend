@@ -30,7 +30,8 @@ public class WebSocketConfig
         registry.addEndpoint("/ws")
                 .setAllowedOrigins(
                         "http://localhost:8083",
-                        "http://localhost:5173"
+                        "http://localhost:5173",
+                        "http://192.168.1.100:8083"
                 )
                 .withSockJS();
 

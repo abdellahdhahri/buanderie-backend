@@ -1,5 +1,8 @@
 package tn.softsys.buanderie.service.Process;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +17,7 @@ import tn.softsys.buanderie.repository.*;
 import tn.softsys.buanderie.service.management.SacInfecteService;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -33,170 +37,117 @@ public class CollecteServiceService {
     private final SacInfecteRepository           sacInfecteRepo;
     private final SacInfecteService              sacInfecteService;
     private final SqlServerPersonnelRepository personnelReo;
+    private final ObjectMapper objectMapper;
 
-
+    @Transactional
     public Map<String, Object> ouvrirService(
             String matriculeAgent,
             Long serviceId,
             String refOuCode) {
 
-        // ============================================
-        // 1. Récupérer le Personnel depuis SQL Server
-        // ============================================
+        Personnel personnel = personnelReo
+                .findByCodeBarre(matriculeAgent);
+//                .orElseThrow(() ->
+//                        new BusinessException(
+//                                "Agent introuvable : " + matriculeAgent
+//                        )
+//                );
 
-        Personnel personnel = personnelReo.findByCodeBarre(matriculeAgent);
+        Optional<tn.softsys.buanderie.Sqlserver.sqlServerEntities.Service> svc = resolveService(serviceId, refOuCode);
 
-        if (personnel == null) {
-            throw new ResourceNotFoundException(
-                    "Personnel",
-                    "codeBarre",
-                    matriculeAgent
-            );
-        }
-
-        Long personnelId = personnel.getId();
-
-
-
-
-        tn.softsys.buanderie.Sqlserver.sqlServerEntities.Service svc = null;
-
-        if (serviceId != null) {
-            svc = sqlServiceRepo.findById(serviceId).orElse(null);
-        }
-
-        if (svc == null && refOuCode != null && !refOuCode.isBlank()) {
-
-            svc = sqlServiceRepo.findByReference(refOuCode);
-
-            if (svc == null) {
-                svc = sqlServiceRepo.findByCode(refOuCode);
-            }
-        }
-
-        if (svc == null) {
-            throw new BusinessException(
-                    "Service introuvable (id=" + serviceId
-                            + ", ref=" + refOuCode + ")"
-            );
-        }
-
-
-
-
-        List<Linge> attendus =
-                lingeRepo.findByServiceIdAndEtat(
-                        svc.getId(),
-                        EtatLinge.LIVRE
-                );
-
-
-
-        attendus.forEach(l -> {
-
-            if (l.getStatutCollecte()
-                    == StatutCollecteLinge.PROPRE) {
-
-                l.setStatutCollecte(null);
-                lingeRepo.save(l);
-            }
-        });
-
-
+        List<Linge> attendus = lingeRepo.findByServiceIdAndEtat(
+                svc.get().getId(),
+                EtatLinge.LIVRE
+        );
 
         if (attendus.isEmpty()) {
             throw new BusinessException(
-                    "Aucun linge LIVRE pour le service ["
-                            + svc.getCode()
-                            + "]. Impossible d'ouvrir une collecte."
+                    "Aucun linge livré à collecter pour ce service"
             );
         }
 
-
-
-
-        Collecte collecte =
-                collecteRepo.save(
-                        Collecte.builder()
-
-                                // ID du Personnel SQL Server
-                                .personnelId(personnelId)
-
-                                // ID du service SQL Server
-                                .service(svc.getId())
-
-                                .typeCollecte(
-                                        TypeCollecte.MIXTE
-                                )
-
-                                .etatCollecte(
-                                        EtatCollecte.EN_TRAITEMENT
-                                )
-
-                                .nbAttendus(
-                                        attendus.size()
-                                )
-
-                                .numeroCollecte(
-                                        "SVC-"
-                                                + System.currentTimeMillis()
-                                )
-
-                                .build()
-                );
-
-
-
-
-        List<Map<String, Object>> lingesDto =
+        /*
+         * Snapshot des quantités attendues.
+         */
+        Map<CategLinge, Integer> attendusParCategorie =
                 attendus.stream()
-                        .map(l ->
-                                Map.<String, Object>of(
-                                        "lingeId",
-                                        l.getId(),
+                        .collect(Collectors.groupingBy(
+                                Linge::getCategorie,
+                                () -> new EnumMap<>(CategLinge.class),
+                                Collectors.summingInt(l -> 1)
+                        ));
 
-                                        "codeBarre",
-                                        l.getCodeBarre(),
+        String quantitesAttendues;
 
-                                        "rfid",
-                                        l.getRfidTag() != null
-                                                ? l.getRfidTag()
-                                                : "",
+        try {
+            quantitesAttendues =
+                    objectMapper.writeValueAsString(
+                            attendusParCategorie
+                    );
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(
+                    "Impossible de créer le snapshot des quantités attendues"
+            );
+        }
 
-                                        "categorie",
-                                        l.getCategorie().name(),
+        /*
+         * Nettoyage du statut PROPRE provenant éventuellement
+         * d'une ancienne opération.
+         */
+        attendus.forEach(l -> {
+            if (l.getStatutCollecte() == StatutCollecteLinge.PROPRE) {
+                l.setStatutCollecte(null);
+            }
+        });
 
-                                        "statut",
-                                        ""
-                                )
-                        )
-                        .collect(Collectors.toList());
+        lingeRepo.saveAll(attendus);
 
+        Collecte collecte = Collecte.builder()
+                .personnelId(personnel.getId())
+                .service(svc.get().getId())
+                .typeCollecte(TypeCollecte.MIXTE)
+                .etatCollecte(EtatCollecte.EN_TRAITEMENT)
+                .dateDebut(LocalDateTime.now())
+                .nbAttendus(attendus.size())
+                .nbScannésBlanc(0)
+                .nbPropres(0)
+                .nbInfectésPrésumés(0)
+                .nbManquants(0)
+                .quantitesAttendues(quantitesAttendues)
+                .numeroCollecte(genererNumeroCollecte())
+                .build();
 
-        return Map.of(
-                "collecteId",
-                collecte.getId(),
+        collecte = collecteRepo.save(collecte);
 
-                "personnelId",
-                personnelId,
+        /*
+         * Réponse.
+         */
+        List<Map<String, Object>> lignes =
+                attendus.stream()
+                        .map(l -> {
+                            Map<String, Object> row =
+                                    new HashMap<>();
 
-                "serviceId",
-                svc.getId(),
+                            row.put("id", l.getId());
+                            row.put("codeBarre", l.getCodeBarre());
+                            row.put("rfidTag", l.getRfidTag());
+                            row.put("categorie", l.getCategorie());
+                            row.put("statut", null);
 
-                "serviceCode",
-                svc.getCode(),
+                            return row;
+                        })
+                        .toList();
 
-                "serviceRef",
-                svc.getReference() != null
-                        ? svc.getReference()
-                        : "",
+        Map<String, Object> response = new HashMap<>();
 
-                "nbAttendus",
-                attendus.size(),
+        response.put("collecteId", collecte.getId());
+        response.put("numeroCollecte", collecte.getNumeroCollecte());
+        response.put("serviceId", svc.get().getId());
+        response.put("nbAttendus", collecte.getNbAttendus());
+        response.put("attendusParCategorie", attendusParCategorie);
+        response.put("linges", lignes);
 
-                "linges",
-                lingesDto
-        );
+        return response;
     }
 
 
@@ -283,23 +234,156 @@ public class CollecteServiceService {
 
 
     @Transactional
-    public SacInfecteDTO declarerSacInfecte(Long collecteId,
-                                            SacInfecteRequest request) {
-        Collecte c = findC(collecteId);
+    public SacInfecteDTO declarerSacInfecte(
+            Long collecteId,
+            SacInfecteRequest request) {
 
-        // Vérifier que le bac rouge existe
-        if (request.getBacId() != null) {
-            Bac bacRouge = bacRepo.findById(request.getBacId())
-                    .orElseThrow(() -> new BusinessException(
-                            "Bac rouge introuvable id=" + request.getBacId()));
-            if (bacRouge.getTypebac() != TypeBac.INFECTE)
-                throw new BusinessException(
-                        "Le bac [" + bacRouge.getCode() + "] n'est pas un bac infecté (ROUGE).");
+        /*
+         * IMPORTANT :
+         * on récupère la collecte avec un verrou pessimiste.
+         */
+        Collecte c = collecteRepo
+                .findByIdForUpdate(collecteId)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                "Collecte introuvable : " + collecteId
+                        )
+                );
+
+        /*
+         * Vérifier l'état de la collecte.
+         */
+        if (c.getEtatCollecte() != EtatCollecte.EN_TRAITEMENT) {
+
+            throw new BusinessException(
+                    "La collecte n'est plus en cours de traitement"
+            );
         }
 
-        return sacInfecteService.declarerSacInfecte(request, c);
-    }
+        /*
+         * Vérifier le contenu de la requête.
+         */
+        if (request == null
+                || request.getItems() == null
+                || request.getItems().isEmpty()) {
 
+            throw new BusinessException(
+                    "Le sac infecté doit contenir au moins un article"
+            );
+        }
+
+        /*
+         * Vérification du bac.
+         */
+        if (request.getBacId() != null) {
+
+            Bac bac = bacRepo.findById(request.getBacId())
+                    .orElseThrow(() ->
+                            new BusinessException(
+                                    "Bac introuvable id="
+                                            + request.getBacId()
+                            )
+                    );
+
+            if (bac.getTypebac() != TypeBac.INFECTE) {
+
+                throw new BusinessException(
+                        "Le bac ["
+                                + bac.getCode()
+                                + "] n'est pas un bac infecté (ROUGE)."
+                );
+            }
+        }
+
+
+        Map<CategLinge, Long> demandes =
+                request.getItems()
+                        .stream()
+                        .collect(Collectors.groupingBy(
+                                SacInfecteItemRequest::getCategorie,
+                                () -> new EnumMap<>(CategLinge.class),
+                                Collectors.summingLong(
+                                        item -> {
+
+                                            if (item.getQuantiteDeclaree()
+                                                    == null) {
+
+                                                throw new BusinessException(
+                                                        "Quantité obligatoire pour "
+                                                                + item.getCategorie()
+                                                );
+                                            }
+
+                                            if (item.getQuantiteDeclaree()
+                                                    <= 0) {
+
+                                                throw new BusinessException(
+                                                        "La quantité doit être "
+                                                                + "supérieure à zéro pour "
+                                                                + item.getCategorie()
+                                                );
+                                            }
+
+                                            return item.getQuantiteDeclaree();
+                                        }
+                                )
+                        ));
+
+        /*
+         * Quantités restantes AVANT cette déclaration.
+         */
+        Map<CategLinge, Long> restantes =
+                getQuantitesRestantes(c);
+
+        /*
+         * Validation catégorie par catégorie.
+         */
+        for (Map.Entry<CategLinge, Long> entry
+                : demandes.entrySet()) {
+
+            CategLinge categorie = entry.getKey();
+
+            long demande = entry.getValue();
+
+            long restant =
+                    restantes.getOrDefault(categorie, 0L);
+
+            /*
+             * Une catégorie qui n'existe pas dans le snapshot
+             * ne peut pas être déclarée.
+             */
+            if (!getAttendusParCategorie(c)
+                    .containsKey(categorie)) {
+
+                throw new BusinessException(
+                        "La catégorie "
+                                + categorie.name()
+                                + " ne fait pas partie des linges "
+                                + "attendus de cette collecte"
+                );
+            }
+
+            if (demande > restant) {
+
+                throw new BusinessException(
+                        "Quantité infectée déclarée trop élevée pour "
+                                + categorie.name()
+                                + " : déclaré="
+                                + demande
+                                + ", restant="
+                                + restant
+                );
+            }
+        }
+
+        /*
+         * Tout est valide.
+         *
+         * On délègue maintenant la création du sac.
+         */
+        return sacInfecteService
+                .declarerSacInfecte(request, c);
+    }
     //  PROPRE — linge laissé en place (ne part pas en lavage)
     @Transactional
     public Map<String, Object> declarerPropre(Long collecteId, String codeOuTag) {
@@ -404,5 +488,181 @@ public class CollecteServiceService {
     }
     private long cnt(List<CollecteLinge> it, TypeCollecte t) {
         return it.stream().filter(x -> t == x.getTypeCollecte()).count();
+    }
+
+    private Map<CategLinge, Integer> getAttendusParCategorie(
+            Collecte collecte) {
+
+        if (collecte.getQuantitesAttendues() == null
+                || collecte.getQuantitesAttendues().isBlank()) {
+
+            throw new BusinessException(
+                    "Le snapshot des quantités attendues est absent"
+            );
+        }
+
+        try {
+
+            return objectMapper.readValue(
+                    collecte.getQuantitesAttendues(),
+                    new TypeReference<EnumMap<CategLinge, Integer>>() {}
+            );
+
+        } catch (JsonProcessingException e) {
+
+            throw new BusinessException(
+                    "Snapshot des quantités attendu invalide"
+            );
+        }
+    }
+
+    private Map<CategLinge, Long> getQuantitesTraitees(
+            Long collecteId) {
+
+        Map<CategLinge, Long> result =
+                new EnumMap<>(CategLinge.class);
+
+        /*
+         * 1. Linges individuels :
+         * BLANC
+         * PROPRE_EN_PLACE
+         * MANQUANT
+         */
+        List<CollecteLinge> lignes =
+                collecteLingeRepo.findByCollecte_Id(collecteId);
+
+        for (CollecteLinge cl : lignes) {
+
+            if (cl.getLinge() == null) {
+                continue;
+            }
+
+            TypeCollecte type = cl.getTypeCollecte();
+
+            if (type != TypeCollecte.BLANC
+                    && type != TypeCollecte.PROPRE_EN_PLACE
+                    && type != TypeCollecte.MANQUANT) {
+
+                continue;
+            }
+
+            CategLinge categorie =
+                    cl.getLinge().getCategorie();
+
+            result.merge(
+                    categorie,
+                    1L,
+                    Long::sum
+            );
+        }
+
+
+        List<SacInfecte> sacs =
+                sacInfecteRepo.findByCollecte_Id(collecteId);
+
+        for (SacInfecte sac : sacs) {
+
+            if (sac.getItems() == null) {
+                continue;
+            }
+
+            for (SacInfecteItem item : sac.getItems()) {
+
+                if (item.getCategorie() == null) {
+                    continue;
+                }
+
+                long quantite =
+                        item.getQuantiteDeclaree();
+
+                result.merge(
+                        item.getCategorie(),
+                        quantite,
+                        Long::sum
+                );
+            }
+        }
+
+        return result;
+    }
+    private Map<CategLinge, Long> getQuantitesRestantes(
+            Collecte collecte) {
+
+        Map<CategLinge, Integer> attendus =
+                getAttendusParCategorie(collecte);
+
+        Map<CategLinge, Long> traites =
+                getQuantitesTraitees(collecte.getId());
+
+        Map<CategLinge, Long> restantes =
+                new EnumMap<>(CategLinge.class);
+
+        for (Map.Entry<CategLinge, Integer> entry
+                : attendus.entrySet()) {
+
+            CategLinge categorie = entry.getKey();
+
+            long attendu = entry.getValue();
+
+            long traite =
+                    traites.getOrDefault(categorie, 0L);
+
+            long restant = attendu - traite;
+
+            if (restant < 0) {
+
+                throw new BusinessException(
+                        "Incohérence de quantité pour "
+                                + categorie.name()
+                                + " : attendu=" + attendu
+                                + ", traité=" + traite
+                );
+            }
+
+            restantes.put(
+                    categorie,
+                    restant
+            );
+        }
+
+        return restantes;
+    }
+    private String genererNumeroCollecte() {
+
+        return "COL-"
+                + LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"))
+                + "-"
+                + UUID.randomUUID()
+                .toString()
+                .substring(0, 6)
+                .toUpperCase();
+    }
+    private Optional<tn.softsys.buanderie.Sqlserver.sqlServerEntities.Service> resolveService(Long serviceId, String refOuCode) {
+
+        if (serviceId != null) {
+            return sqlServiceRepo.findById(serviceId);
+//                    .orElseThrow(() ->
+//                            new BusinessException(
+//                                    "Service introuvable avec l'id : " + serviceId
+//                            )
+//                    );
+        }
+
+        if (refOuCode == null || refOuCode.isBlank()) {
+            throw new BusinessException(
+                    "Le service doit être identifié par son id, sa référence ou son code"
+            );
+        }
+
+        String valeur = refOuCode.trim();
+
+        return sqlServiceRepo
+                .findByReferenceIgnoreCaseOrCodeIgnoreCase(valeur, valeur);
+//                .orElseThrow(() ->
+//                        new BusinessException(
+//                                "Service introuvable : " + valeur
+//                        )
+//                );
     }
 }

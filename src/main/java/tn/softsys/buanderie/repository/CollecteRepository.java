@@ -1,12 +1,15 @@
 package tn.softsys.buanderie.repository;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import tn.softsys.buanderie.entity.Collecte;
 import tn.softsys.buanderie.entity.ServiceEntity;
 import tn.softsys.buanderie.entity.enums.EtatCollecte;
+import tn.softsys.buanderie.entity.enums.TypeCollecte;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,5 +34,36 @@ public interface CollecteRepository extends JpaRepository<Collecte, Long> {
             Long personnelId,
             EtatCollecte etatCollecte
     );
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        SELECT c
+        FROM Collecte c
+        WHERE c.id = :id
+    """)
+    Optional<Collecte> findByIdForUpdate(
+            @Param("id") Long id
+    );
+    List<Collecte> findByServiceInAndDateCollecteBetween(
+            List<Long> serviceIds,
+            LocalDateTime debut,
+            LocalDateTime fin
+    );
 
+    List<Collecte> findByPersonnelIdAndDateCollecteBetween(
+            Long personnelId,
+            LocalDateTime debut,
+            LocalDateTime fin
+    );
+
+    List<Collecte> findByTypeCollecteAndDateCollecteBetween(
+            TypeCollecte typeCollecte,
+            LocalDateTime debut,
+            LocalDateTime fin
+    );
+
+    List<Collecte> findByEtatCollecteAndDateCollecteBetween(
+            EtatCollecte etatCollecte,
+            LocalDateTime debut,
+            LocalDateTime fin
+    );
 }
