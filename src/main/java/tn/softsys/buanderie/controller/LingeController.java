@@ -15,7 +15,9 @@ import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.LingeImportRepository;
+import tn.softsys.buanderie.Sqlserver.dtos.LingeImportableProjectionDto;
 import tn.softsys.buanderie.Sqlserver.projection.LingeImportableProjection;
+import tn.softsys.buanderie.Sqlserver.sqlServerServices.CubixImportClient;
 import tn.softsys.buanderie.Sqlserver.sqlServerServices.LingeImportService;
 import tn.softsys.buanderie.dto.Linge.AssocierRfidRequest;
 import tn.softsys.buanderie.dto.Historique.HistoriqueLingeDto;
@@ -32,6 +34,7 @@ public class LingeController {
     private final CollecteServiceService collecteService;
     private final LingeImportRepository lingeImportRepository;
     private final LingeImportService lingeImportService;
+    private final CubixImportClient cubixImportClient;
 
 
    // @PreAuthorize("hasAuthority('LIG1305')")
@@ -50,9 +53,18 @@ public class LingeController {
     @Operation(summary = "Récupérer l historique global")
 
     @GetMapping("/historique/historique-global")
-    public List<HistoriqueLinge> getAllHistorique() {
+    public ResponseEntity<Page<HistoriqueLinge>> getHistorique(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "id") String sortBy,
+            @RequestParam(defaultValue = "desc") String direction) {
 
-        return lingeService.getHistorique();
+        Sort sort = direction.equalsIgnoreCase("asc")
+                ? Sort.by(sortBy).ascending()
+                : Sort.by(sortBy).descending();
+
+        Pageable pageable = PageRequest.of(page, size, sort);
+        return ResponseEntity.ok(lingeService.getHistorique(pageable));
     }
     @GetMapping("/{id}") public Linge getById(@PathVariable Long id) { return lingeService.findById(id); }
     @GetMapping("/rfid/{rfid}") public Linge getByrfid(@PathVariable String rfid) { return lingeService.getByRfidTag(rfid); }
@@ -118,18 +130,13 @@ public class LingeController {
                 lingeService.associerTagRfid(request));
     }
 
+
     @GetMapping("/a-importer")
-    public Page<LingeImportableProjection> getLingesAImporter(
+    public Page<LingeImportableProjectionDto> getLingesAImporter(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
 
-        Pageable pageable = PageRequest.of(
-                page,
-                size,
-                Sort.by("id").ascending()
-        );
-
-        return lingeImportRepository.findLingesImportables(pageable);
+        return cubixImportClient.getLinges(page, size);
     }
     @PostMapping("/import")
     public ResponseEntity<?> importerLinges(

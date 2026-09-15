@@ -36,273 +36,143 @@ public class AuthService {
     public LoginResponseDTO login(String login, String password) {
 
 
-        String loginUrl =
-                baseUrl + "/Login/Index";
+        if (login == null || login.isBlank()) {
+            throw new RuntimeException("Login obligatoire");
+        }
 
-        MultiValueMap<String, String> form =
-                new LinkedMultiValueMap<>();
+        if (password == null || password.isBlank()) {
+            throw new RuntimeException("Mot de passe obligatoire");
+        }
 
+        String loginUrl = baseUrl + "/Login/CheckUser";
+
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("Login", login);
         form.add("Password", password);
+        form.add("touch", "false");
 
-        HttpHeaders headers =
-                new HttpHeaders();
-
-        headers.setContentType(
-                MediaType.APPLICATION_FORM_URLENCODED
-        );
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
         HttpEntity<MultiValueMap<String, String>> request =
                 new HttpEntity<>(form, headers);
 
-        ResponseEntity<String> response;
+        ResponseEntity<Map> response;
 
         try {
-
             response = restTemplate.exchange(
                     loginUrl,
                     HttpMethod.POST,
                     request,
-                    String.class
+                    Map.class
             );
 
         } catch (Exception e) {
-
             throw new RuntimeException(
                     "Erreur lors de l'authentification ASP.NET",
                     e
             );
         }
 
+        Map data = response.getBody();
 
-        List<String> cookies =
-                response.getHeaders()
-                        .get(HttpHeaders.SET_COOKIE);
-
-        if (cookies == null || cookies.isEmpty()) {
-
-            throw new RuntimeException(
-                    "Aucun cookie retourné par ASP.NET après le login"
-            );
+        if (data == null) {
+            throw new RuntimeException("Réponse ASP.NET vide");
         }
 
+        Boolean success = (Boolean) data.get("success");
 
-        String sessionId = null;
+        if (!Boolean.TRUE.equals(success)) {
+            throw new RuntimeException("Login ou mot de passe incorrect");
+        }
 
-        for (String cookie : cookies) {
+        Long userId = null;
 
-            if (cookie != null &&
-                    cookie.startsWith("ASP.NET_SessionId=")) {
+        if (data.get("idUser") != null) {
+            userId = ((Number) data.get("idUser")).longValue();
+        }
 
-                sessionId = cookie
-                        .substring("ASP.NET_SessionId=".length())
-                        .split(";")[0];
+        String username = data.get("username") != null
+                ? data.get("username").toString()
+                : null;
 
-                break;
+        String nom = data.get("nom") != null
+                ? data.get("nom").toString()
+                : "";
+
+        String prenom = data.get("prenom") != null
+                ? data.get("prenom").toString()
+                : "";
+
+        String nomPrenom = (prenom + " " + nom).trim();
+
+
+        String codeBarre = data.get("codeBarre") != null
+                ? data.get("codeBarre").toString()
+                : null;
+
+
+        List<String> privileges = new ArrayList<>();
+
+        Object privilegesObject = data.get("privilieges");
+
+        if (privilegesObject instanceof List) {
+
+            for (Object privilege : (List<?>) privilegesObject) {
+
+                if (privilege == null) {
+                    continue;
+                }
+
+                String code = privilege.toString().trim();
+
+                if (!code.isEmpty() && !privileges.contains(code)) {
+                    privileges.add(code);
+                }
             }
         }
 
-
-        if (sessionId == null || sessionId.isBlank()) {
-
-            throw new RuntimeException(
-                    "ASP.NET_SessionId introuvable après authentification"
-            );
-        }
-
-
-        String connectedUrl =
-                baseUrl + "/Login/IsConnected";
-
-
-        HttpHeaders sessionHeaders =
-                new HttpHeaders();
-
-        sessionHeaders.add(
-                HttpHeaders.COOKIE,
-                "ASP.NET_SessionId=" + sessionId
-        );
-
-
-        HttpEntity<Void> sessionRequest =
-                new HttpEntity<>(sessionHeaders);
-
-
-        ResponseEntity<String> connectedResponse;
-
-        try {
-
-            connectedResponse = restTemplate.exchange(
-                    connectedUrl,
-                    HttpMethod.GET,
-                    sessionRequest,
-                    String.class
-            );
-
-        } catch (Exception e) {
-
-            throw new RuntimeException(
-                    "Impossible de vérifier la session ASP.NET",
-                    e
-            );
-        }
-
-
-        String connected =
-                connectedResponse.getBody();
-
-
-        if (!"OK".equalsIgnoreCase(
-                connected != null
-                        ? connected.trim()
-                        : ""
-        )) {
-
-            throw new RuntimeException(
-                    "La session ASP.NET n'est pas connectée"
-            );
-        }
-
-        UserDTO currentUser = getCurrentUser(sessionId);
-
-        String privilegesUrl =
-                UriComponentsBuilder
-                        .fromHttpUrl(
-                                baseUrl + "/Login/Mobile"
-                        )
-                        .queryParam("a", login)
-                        .queryParam("b", password)
-                        .queryParam("v", "1")
-                        .toUriString();
-
-
-        ResponseEntity<List> privilegesResponse;
-
-        try {
-
-            privilegesResponse =
-                    restTemplate.exchange(
-                            privilegesUrl,
-                            HttpMethod.GET,
-                            null,
-                            List.class
-                    );
-
-        } catch (Exception e) {
-
-            throw new RuntimeException(
-                    "Erreur lors de récupération des privilèges ASP.NET",
-                    e
-            );
-        }
-
-
-
-        List responseData =
-                privilegesResponse.getBody();
-
-        if (responseData == null ||
-                responseData.size() < 3) {
-
-            throw new RuntimeException(
-                    "Réponse des privilèges ASP.NET invalide"
-            );
-        }
-
-
-
-        Object statusObject =
-                responseData.get(0);
-
-        String status =
-                statusObject != null
-                        ? statusObject.toString().trim()
-                        : "";
-
-
-        if (!"-[OK]-".equalsIgnoreCase(status)) {
-
-            throw new RuntimeException(
-                    "ASP.NET a refusé la récupération des privilèges"
-            );
-        }
-
-
-        Object adminObject =
-                responseData.get(2);
-
-        String adminValue =
-                adminObject != null
-                        ? adminObject.toString().trim()
-                        : "0";
-
-
-        boolean admin =
-                "1".equals(adminValue);
-
-
-
-
-        List<String> privileges =
-                new ArrayList<>();
-
-
-        for (int i = 3; i < responseData.size(); i++) {
-
-            Object item =
-                    responseData.get(i);
-
-            if (item == null) {
-                continue;
-            }
-
-
-            String privilege =
-                    item.toString().trim();
-
-
-            if (!privilege.isEmpty() &&
-                    !privileges.contains(privilege)) {
-
-                privileges.add(privilege);
-            }
-        }
-
-
+        boolean admin = false;
 
         boolean hasBuanderieAccess =
-                admin ||
-                        privileges.contains("LIG0");
-
+                admin || privileges.contains("LIG0");
 
         if (!hasBuanderieAccess) {
-
             throw new RuntimeException(
                     "Accès refusé au module Buanderie"
             );
         }
+
+
+        UserDTO userDTO = new UserDTO(
+                userId,
+                username,
+                nomPrenom,
+                codeBarre,
+                null,
+                null
+        );
+
         SecurityUser securityUser =
                 new SecurityUser(
-                        login,
+                        username,
                         admin,
                         privileges
                 );
 
-
-
-        String token =
-                jwtService.generateToken(securityUser);
-
+        String token = jwtService.generateToken(securityUser);
 
         return new LoginResponseDTO(
                 token,
-                currentUser.getLogin(),
+                username,
                 admin,
                 privileges,
-                currentUser.getCodeBarre(),
-                currentUser
+                codeBarre,
+                userDTO
         );
     }
+
+
 
     //login par badge
 
@@ -474,6 +344,8 @@ public class AuthService {
                 userDTO
         );
     }
+
+
 
 
 

@@ -9,7 +9,6 @@ import lombok.*;
 import tn.softsys.buanderie.entity.enums.EtatCollecte;
 import tn.softsys.buanderie.entity.enums.TypeCollecte;
 
-
 @Entity
 @Table(name = "collectes")
 @Data
@@ -29,7 +28,6 @@ public class Collecte {
 
     private Long service;
 
-
     @Column(name = "chambre_id_sqlserver")
     private Long chambreIdSqlServer;
 
@@ -38,17 +36,18 @@ public class Collecte {
 
     @Column(name = "code_chambre", length = 30)
     private String codeChambre;
+
     @Enumerated(EnumType.STRING)
     private TypeCollecte typeCollecte;
 
     private LocalDateTime dateDebut;
+
     private LocalDateTime dateFin;
 
     @Enumerated(EnumType.STRING)
     private EtatCollecte etatCollecte;
 
     private LocalDateTime dateCollecte;
-
 
     @Column(name = "nb_attendus")
     private Integer nbAttendus;
@@ -64,11 +63,19 @@ public class Collecte {
 
     @Column(name = "nb_manquants")
     private Integer nbManquants;
+
+    // Snapshot des quantités attendues par catégorie
+    @Column(name = "quantites_attendues", columnDefinition = "TEXT")
+    private String quantitesAttendues;
+
     @ManyToOne
     @JoinColumn(name = "session_parent_id")
     private Collecte sessionParent;
+
     @PrePersist
     protected void onCreate() {
-        if (this.dateCollecte == null) this.dateCollecte = LocalDateTime.now();
+        if (this.dateCollecte == null) {
+            this.dateCollecte = LocalDateTime.now();
+        }
     }
 }

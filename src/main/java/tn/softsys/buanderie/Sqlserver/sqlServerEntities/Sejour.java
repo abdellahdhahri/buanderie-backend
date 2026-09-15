@@ -33,5 +33,7 @@ public class Sejour {
     private Service service;
     @Column(name = "PatientID")
     private  Long patientId;
+    @Column(name = "BMR")
+    private  Long BMR;
 
 }

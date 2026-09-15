@@ -2,6 +2,7 @@ package tn.softsys.buanderie.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import tn.softsys.buanderie.entity.enums.EtatSac;
 import tn.softsys.buanderie.entity.SacInfecte;
@@ -19,9 +20,9 @@ public interface SacInfecteRepository extends JpaRepository<SacInfecte, Long> {
 
 
     List<SacInfecte> findByCollecte_Id(Long collecteId);
+    @Query("SELECT s FROM SacInfecte s WHERE s.personnelId = :personnelId ORDER BY s.dateCollecte DESC")
 
-    @Query("SELECT s FROM SacInfecte s WHERE s.agentCollecte.matricule = :matricule ORDER BY s.dateCollecte DESC")
-    List<SacInfecte> findByAgentMatricule(String matricule);
+    List<SacInfecte> findByPersonnelId(@Param("personnelId") Long personnelId);
 
     @Query("SELECT s FROM SacInfecte s WHERE s.ecart <> 0 AND s.ecart IS NOT NULL ORDER BY s.dateVerification DESC")
     List<SacInfecte> findSacsAvecEcart();
