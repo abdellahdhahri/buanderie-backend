@@ -12,14 +12,14 @@ public class ChambreService {
     private final ChambreRepository chambreRepository;
     public List<Chambre> findAll() { return chambreRepository.findAll(); }
     public Chambre findById(Long id) { return chambreRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Chambre", id)); }
-    public Chambre findByNumero(String numero) { return chambreRepository.findByNumero(numero).orElseThrow(() -> new ResourceNotFoundException("Chambre", "numero", numero)); }
-    public Chambre creer(Chambre chambre) {
+   // public Chambre findByNumero(String numero) { return chambreRepository.findByNumero(numero).orElseThrow(() -> new ResourceNotFoundException("Chambre", "numero", numero)); }
+   /* public Chambre creer(Chambre chambre) {
         if (chambreRepository.existsByNumero(chambre.getNumero())) throw new BusinessException("Chambre " + chambre.getNumero() + " existe déjà");
         return chambreRepository.save(chambre);
     }
     public Chambre modifier(Long id, Chambre data) {
         Chambre c = findById(id); c.setType(data.getType()); c.setEtage(data.getEtage());
         return chambreRepository.save(c);
-    }
+    }*/
     public void supprimer(Long id) { chambreRepository.deleteById(id); }
 }

@@ -4,7 +4,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
+import tn.softsys.buanderie.Sqlserver.dtos.PersonnelDto;
 import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
+import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
 import tn.softsys.buanderie.dto.Lot.LotScanResponse;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
@@ -16,7 +18,6 @@ import tn.softsys.buanderie.service.Reporting.NotificationService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -32,7 +33,7 @@ public class CycleLavageService {
     private final HistoriqueLingeRepository historiqueLingeRepository;
     private final NotificationService notificationService;
     private final SacInfecteRepository sacInfecteRepository;
-
+    private final CubixPersonnelService cubixPersonnelService;
     private final SqlServerPersonnelRepository sqlPersonnelRepo;
 
 
@@ -258,7 +259,6 @@ public class CycleLavageService {
 
 
 
-                // On garde le sac dans son état EN_LAVAGE
                 // jusqu'à la vérification physique.
                 if (sac.getEtat() != EtatSac.EN_LAVAGE) {
                     throw new BusinessException(
@@ -368,13 +368,15 @@ public class CycleLavageService {
             String matriculeAgent) {
 
         // Agent
-        Agent agent = agentRepository.findByMatricule(matriculeAgent)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "AGENT",
-                                "matriculeAgent",
-                                matriculeAgent
-                        ));
+       // Agent agent = agentRepository.findByMatricule(matriculeAgent)
+        PersonnelDto agent = cubixPersonnelService.getByCode(matriculeAgent);
+
+//                .orElseThrow(() ->
+//                        new ResourceNotFoundException(
+//                                "AGENT",
+//                                "matriculeAgent",
+//                                matriculeAgent
+//                        ));
 
         // Sac
         SacInfecte sac = sacInfecteRepository
@@ -424,7 +426,7 @@ public class CycleLavageService {
         // Création du cycle
         CycleLavage cycle = CycleLavage.builder()
                 .machine(machine)
-                .agent(agent)
+                //.agent(agent)
                 .programmeLavage(programmeDesinfection)
                 .dateDebut(LocalDateTime.now())
                 .statut(StatutCycle.EN_COURS)
@@ -450,7 +452,7 @@ public class CycleLavageService {
         // Sac en lavage
         sac.setEtat(EtatSac.EN_LAVAGE);
         sac.setDateLavage(LocalDateTime.now());
-        sac.setAgentLavage(agent);
+      //  sac.setAgentLavage(agent);
         sac.setCycleLavage(cycle);
 
         sacInfecteRepository.save(sac);

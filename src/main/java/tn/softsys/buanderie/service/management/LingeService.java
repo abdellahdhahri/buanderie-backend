@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
 import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
-import tn.softsys.buanderie.Sqlserver.sqlServerServices.PersonnelService;
+import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
 import tn.softsys.buanderie.dto.Linge.AssocierRfidRequest;
 import tn.softsys.buanderie.dto.Historique.HistoriqueLingeDto;
 import tn.softsys.buanderie.dto.LingeDTO;
@@ -43,7 +43,7 @@ public class LingeService {
     private final ServiceRepository serviceRepository;
     private final LitRepository litRepository;
     private final  LotRepository lotRepository;
-    private final PersonnelService personnelService;
+    private final CubixPersonnelService cubixPersonnelService;
     private final SqlServerPersonnelRepository personnelRepository;
 
     public Page<LingeDTO> getLingesPaged(

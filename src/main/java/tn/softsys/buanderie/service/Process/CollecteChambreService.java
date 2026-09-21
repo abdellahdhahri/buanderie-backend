@@ -1,13 +1,20 @@
 package tn.softsys.buanderie.service.Process;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.*;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.*;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Chambre;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Lit;
+
+import tn.softsys.buanderie.Sqlserver.Cubix.CubixChambreService;
+import tn.softsys.buanderie.Sqlserver.Cubix.CubixLitService;
+import tn.softsys.buanderie.Sqlserver.Cubix.CubixLitsInfectesService;
+
+import tn.softsys.buanderie.Sqlserver.dtos.CubixLitDto;
+import tn.softsys.buanderie.Sqlserver.dtos.CubixLitInfecteDto;
+import tn.softsys.buanderie.Sqlserver.dtos.PersonnelDto;
+import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
+
+import tn.softsys.buanderie.dto.ChambreDto;
+
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
 import tn.softsys.buanderie.exception.*;
@@ -19,8 +26,11 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 
-@Service @RequiredArgsConstructor @Transactional
+@Service
+@RequiredArgsConstructor
+@Transactional
 public class CollecteChambreService {
+
 
     private final LingeRepository lingeRepo;
     private final AgentRepository agentRepo;
@@ -28,12 +38,17 @@ public class CollecteChambreService {
     private final CollecteRepository collecteRepo;
     private final CollecteLingeRepository collecteLingeRepo;
     private final HistoriqueLingeRepository historiqueRepo;
-    private final SqlServerChambreRepository sqlChambreRepo;
-    private final SqlServerLitRepository sqlLitRepo;
-    private final SqlServerSejourRepository sqlSejourRepo;
-    private final SqlServerPersonnelRepository personnelReo;
     private final SacInfecteRepository sacInfecteRepository;
     private final SacInfecteService sacInfecteService;
+
+
+
+    private final CubixPersonnelService cubixPersonnelService;
+    private final CubixChambreService cubixChambreService;
+    private final CubixLitService cubixLitService;
+    private final CubixLitsInfectesService cubixLitsInfectesService;
+
+
 
 
     @Transactional(readOnly = true)
@@ -41,34 +56,44 @@ public class CollecteChambreService {
             Long collecteId,
             Long litId) {
 
-        Collecte c = findC(collecteId);
+        Collecte collecte = findC(collecteId);
 
-        if (c.getEtatCollecte() != EtatCollecte.EN_TRAITEMENT) {
+        if (collecte.getEtatCollecte() != EtatCollecte.EN_TRAITEMENT) {
             throw new BusinessException(
                     "La collecte n'est plus en cours de traitement."
             );
         }
 
-        if (c.getChambreIdSqlServer() == null) {
+        if (collecte.getChambreIdSqlServer() == null) {
             throw new BusinessException(
                     "La chambre de la collecte est introuvable."
             );
         }
 
-        Lit lit = sqlLitRepo.findById(litId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Lit",
-                                "id",
-                                litId
-                        )
-                );
+        if (litId == null) {
+            throw new BusinessException(
+                    "L'identifiant du lit est obligatoire."
+            );
+        }
 
-        // Vérifier que le lit appartient à la chambre
-        if (lit.getChambre() == null
+
+
+
+        CubixLitDto lit = cubixLitService.getById(litId);
+
+        if (lit == null) {
+            throw new BusinessException(
+                    "Lit introuvable dans Cubix : " + litId
+            );
+        }
+
+
+
+
+        if (lit.getChambreId() == null
                 || !Objects.equals(
-                lit.getChambre().getId(),
-                c.getChambreIdSqlServer()
+                lit.getChambreId(),
+                collecte.getChambreIdSqlServer()
         )) {
 
             throw new BusinessException(
@@ -76,12 +101,22 @@ public class CollecteChambreService {
             );
         }
 
+
+
+
         boolean infecte =
-                sqlSejourRepo.findLitsInfectes()
+                cubixLitsInfectesService
+                        .getAll()
                         .stream()
                         .anyMatch(l ->
-                                Objects.equals(l.getId(), litId)
+                                Objects.equals(
+                                        l.getId(),
+                                        litId
+                                )
                         );
+
+
+
 
         List<Linge> linges =
                 lingeRepo.findByLitIdSqlServerInAndEtat(
@@ -89,25 +124,38 @@ public class CollecteChambreService {
                         EtatLinge.LIVRE
                 );
 
+
         if (linges.isEmpty()) {
+
             throw new BusinessException(
-                    "Aucun linge LIVRE à traiter pour ce lit."
+                    "Aucun linge LIVRE à traiter pour le lit "
+                            + s(lit.getCode())
+                            + " (ID="
+                            + litId
+                            + ")."
             );
         }
+
 
 
         List<Linge> lingesNonTraites =
                 linges.stream()
                         .filter(l ->
-                                !done(collecteId, l.getId())
+                                !done(
+                                        collecteId,
+                                        l.getId()
+                                )
                         )
                         .collect(Collectors.toList());
 
+
         if (lingesNonTraites.isEmpty()) {
+
             throw new BusinessException(
                     "Tous les linges LIVRE de ce lit ont déjà été traités."
             );
         }
+
 
         return Map.of(
                 "litId",
@@ -130,144 +178,371 @@ public class CollecteChambreService {
     }
 
 
+
     public Map<String, Object> ouvrirChambre(
             String codeBarre,
             String matriculeAgent) {
 
-        Personnel personnel = find(matriculeAgent);
+        if (codeBarre == null || codeBarre.isBlank()) {
+            throw new BusinessException(
+                    "Le code-barres de la chambre est obligatoire."
+            );
+        }
+
+        if (matriculeAgent == null || matriculeAgent.isBlank()) {
+            throw new BusinessException(
+                    "Le matricule de l'agent est obligatoire."
+            );
+        }
+
+        PersonnelDto personnel =
+                cubixPersonnelService.getByCode(matriculeAgent);
+
+        if (personnel == null) {
+            throw new BusinessException(
+                    "Personnel introuvable : " + matriculeAgent
+            );
+        }
 
         Long personnelId = personnel.getId();
 
-        Chambre chambre =
-                sqlChambreRepo
-                        .findByCodeBarre(codeBarre)
-                        .orElseThrow(() ->
-                                new BusinessException(
-                                        "Chambre introuvable : "
-                                                + codeBarre
-                                )
-                        );
+
+
+        ChambreDto chambre =
+                cubixChambreService
+                        .getByCodeBarre(codeBarre);
+
+        if (chambre == null) {
+            throw new BusinessException(
+                    "Chambre introuvable : " + codeBarre
+            );
+        }
+
+        Long chambreId = chambre.getId();
 
 
 
-        Set<Long> infectes =
-                sqlSejourRepo.findLitsInfectes()
+        List<CubixLitInfecteDto> litsInfectes =
+                cubixLitsInfectesService.getAll();
+
+        Set<Long> idsLitsInfectes =
+                litsInfectes
                         .stream()
-                        .map(Lit::getId)
+                        .map(CubixLitInfecteDto::getId)
+                        .filter(Objects::nonNull)
                         .collect(Collectors.toSet());
 
 
 
-        List<Lit> lits =
-                sqlLitRepo.findByChambreId(
-                        chambre.getId(),
-                        PageRequest.of(0, 50)
-                ).getContent();
+
+        List<CubixLitDto> lits =
+                cubixLitService
+                        .getByChambreId(chambreId);
 
 
+        if (lits == null) {
+            lits = Collections.emptyList();
+        }
+
+
+        if (lits.isEmpty()) {
+
+            throw new BusinessException(
+                    "Aucun lit trouvé pour la chambre "
+                            + chambre.getCode()
+            );
+        }
+
+
+        // ========================================================
+        // CONSTRUIRE LES LITS AVEC LEURS LINGES LIVRE
+        // ========================================================
 
         List<Map<String, Object>> litsDto =
-                lits.stream()
-                        .map(lit -> {
-
-                            // IMPORTANT :
-                            // On récupère tous les LIVRE.
-                            // On ne filtre plus sur statutCollecte == null.
-                            List<Linge> lg =
-                                    lingeRepo
-                                            .findByLitIdSqlServerInAndEtat(
-                                                    List.of(lit.getId()),
-                                                    EtatLinge.LIVRE
-                                            )
-                                            .stream()
-                                            // Éviter les linges déjà traités
-                                            // dans cette collecte : ici il n'y
-                                            // a pas encore de collecte créée,
-                                            // donc on garde tous les LIVRE.
-                                            .collect(Collectors.toList());
-
-                            return Map.<String, Object>of(
-                                    "litId",
-                                    lit.getId(),
-
-                                    "codeLit",
-                                    s(lit.getCode()),
-
-                                    "estInfecte",
-                                    infectes.contains(lit.getId()),
-
-                                    "nbLinges",
-                                    lg.size(),
-
-                                    "linges",
-                                    lg.stream()
-                                            .map(l ->
-                                                    Map.<String, Object>of(
-                                                            "lingeId",
-                                                            l.getId(),
-
-                                                            "codeBarre",
-                                                            s(l.getCodeBarre()),
-
-                                                            "rfid",
-                                                            s(l.getRfidTag()),
-
-                                                            "categorie",
-                                                            l.getCategorie() != null
-                                                                    ? l.getCategorie().name()
-                                                                    : "",
-
-                                                            "statut",
-                                                            l.getStatutCollecte() != null
-                                                                    ? l.getStatutCollecte().name()
-                                                                    : ""
-                                                    )
-                                            )
-                                            .collect(Collectors.toList())
-                            );
-                        })
-                        .filter(m ->
-                                (int) m.get("nbLinges") > 0
-                        )
-                        .collect(Collectors.toList());
+                new ArrayList<>();
 
 
+        for (CubixLitDto lit : lits) {
+
+            if (lit == null || lit.getId() == null) {
+                continue;
+            }
+
+
+            Long litId = lit.getId();
+
+
+            // ----------------------------------------------------
+            // Vérification supplémentaire :
+            // le lit doit appartenir à la chambre
+            // ----------------------------------------------------
+
+            if (lit.getChambreId() != null
+                    && !Objects.equals(
+                    lit.getChambreId(),
+                    chambreId
+            )) {
+
+                continue;
+            }
+
+
+            // ----------------------------------------------------
+            // POSTGRESQL :
+            // récupérer les linges LIVRE de CE LIT
+            //
+            // IMPORTANT :
+            // PAS DE SERVICE ID.
+            //
+            // Le lien est :
+            //
+            // Linge.litIdSqlServer
+            //             ↓
+            //       Cubix Lit.id
+            //
+            // ----------------------------------------------------
+
+            List<Linge> linges =
+                    lingeRepo.findByLitIdSqlServerInAndEtat(
+                            List.of(litId),
+                            EtatLinge.LIVRE
+                    );
+
+
+            if (linges == null) {
+                linges = Collections.emptyList();
+            }
+
+
+            // ----------------------------------------------------
+            // Ne garder que les linges non traités
+            // dans la collecte courante.
+            //
+            // Ici la collecte n'existe pas encore.
+            // Donc tous les LIVRE sont conservés.
+            // ----------------------------------------------------
+
+            List<Linge> lingesLivre =
+                    new ArrayList<>(linges);
+
+
+            // ----------------------------------------------------
+            // DEBUG
+            // ----------------------------------------------------
+
+            System.out.println(
+                    "=================================================="
+            );
+
+            System.out.println(
+                    "CHAMBRE CUBIX ID = " + chambreId
+            );
+
+            System.out.println(
+                    "CHAMBRE CODE = " + chambre.getCode()
+            );
+
+            System.out.println(
+                    "LIT CUBIX ID = " + litId
+            );
+
+            System.out.println(
+                    "LIT CODE = " + s(lit.getCode())
+            );
+
+            System.out.println(
+                    "NB LINGES LIVRE = " + lingesLivre.size()
+            );
+
+
+            for (Linge linge : lingesLivre) {
+
+                System.out.println(
+                        "LINGE ID = "
+                                + linge.getId()
+                                + " | CODE = "
+                                + linge.getCodeBarre()
+                                + " | LIT_SQL = "
+                                + linge.getLitIdSqlServer()
+                                + " | CHAMBRE_SQL = "
+                                + linge.getChambreIdSqlServer()
+                                + " | ETAT = "
+                                + linge.getEtat()
+                );
+            }
+
+            System.out.println(
+                    "=================================================="
+            );
+
+
+            // ----------------------------------------------------
+            // Si aucun linge LIVRE sur ce lit,
+            // on ne l'affiche pas.
+            // ----------------------------------------------------
+
+            if (lingesLivre.isEmpty()) {
+                continue;
+            }
+
+
+            // ----------------------------------------------------
+            // CONSTRUIRE LE DTO DU LIT
+            // ----------------------------------------------------
+
+            Map<String, Object> litMap =
+                    new LinkedHashMap<>();
+
+
+            litMap.put(
+                    "litId",
+                    litId
+            );
+
+            litMap.put(
+                    "codeLit",
+                    s(lit.getCode())
+            );
+
+            litMap.put(
+                    "estInfecte",
+                    idsLitsInfectes.contains(litId)
+            );
+
+            litMap.put(
+                    "nbLinges",
+                    lingesLivre.size()
+            );
+
+
+            // ----------------------------------------------------
+            // LINGES
+            // ----------------------------------------------------
+
+            List<Map<String, Object>> lingesDto =
+                    lingesLivre
+                            .stream()
+                            .map(l ->
+                                    Map.<String, Object>of(
+                                            "lingeId",
+                                            l.getId(),
+
+                                            "codeBarre",
+                                            s(l.getCodeBarre()),
+
+                                            "rfid",
+                                            s(l.getRfidTag()),
+
+                                            "categorie",
+                                            l.getCategorie() != null
+                                                    ? l.getCategorie().name()
+                                                    : "",
+
+                                            "statut",
+                                            l.getStatutCollecte() != null
+                                                    ? l.getStatutCollecte().name()
+                                                    : "",
+
+                                            "etat",
+                                            l.getEtat() != null
+                                                    ? l.getEtat().name()
+                                                    : "",
+
+                                            "litIdSqlServer",
+                                            l.getLitIdSqlServer()
+                                    )
+                            )
+                            .collect(Collectors.toList());
+
+
+            litMap.put(
+                    "linges",
+                    lingesDto
+            );
+
+
+            litsDto.add(litMap);
+        }
+
+
+        // ========================================================
+        // AUCUN LINGE DANS LA CHAMBRE
+        // ========================================================
 
         if (litsDto.isEmpty()) {
+
             throw new BusinessException(
                     "Aucun linge LIVRE — chambre "
                             + chambre.getCode()
             );
         }
 
-        int nb =
-                litsDto.stream()
+
+        // ========================================================
+        // CALCUL DU NOMBRE TOTAL
+        // ========================================================
+
+        int nbLinges =
+                litsDto
+                        .stream()
                         .mapToInt(m ->
-                                (int) m.get("nbLinges")
+                                ((Number) m.get("nbLinges"))
+                                        .intValue()
                         )
                         .sum();
 
 
+        // ========================================================
+        // CRÉER LA COLLECTE
+        // ========================================================
 
-        Collecte c =
+        Collecte collecte =
                 collecteRepo.save(
                         Collecte.builder()
-                                .personnelId(personnelId)
-                                .chambreIdSqlServer(chambre.getId())
-                                .codeChambre(chambre.getCode())
-                                .typeCollecte(TypeCollecte.MIXTE)
-                                .etatCollecte(EtatCollecte.EN_TRAITEMENT)
-                                .service(chambre.getService().getId())
-                                .nbAttendus(nb)
-                                .numeroCollecte(
-                                        "CH-" + System.currentTimeMillis()
+                                .personnelId(
+                                        personnelId
                                 )
+
+                                .chambreIdSqlServer(
+                                        chambreId
+                                )
+
+                                .codeChambre(
+                                        chambre.getCode()
+                                )
+
+                                .typeCollecte(
+                                        TypeCollecte.MIXTE
+                                )
+
+                                .etatCollecte(
+                                        EtatCollecte.EN_TRAITEMENT
+                                )
+
+                                .service(
+                                        chambre.getServiceId()
+                                )
+
+                                .nbAttendus(
+                                        nbLinges
+                                )
+
+                                .numeroCollecte(
+                                        "CH-"
+                                                + System.currentTimeMillis()
+                                )
+
                                 .build()
                 );
 
+
+        // ========================================================
+        // RÉPONSE
+        // ========================================================
+
         return Map.of(
                 "collecteId",
-                c.getId(),
+                collecte.getId(),
 
                 "personnelId",
                 personnelId,
@@ -275,11 +550,14 @@ public class CollecteChambreService {
                 "codeChambre",
                 chambre.getCode(),
 
+                "chambreId",
+                chambreId,
+
                 "nbLits",
                 litsDto.size(),
 
                 "nbLinges",
-                nb,
+                nbLinges,
 
                 "lits",
                 litsDto
@@ -287,66 +565,121 @@ public class CollecteChambreService {
     }
 
 
+    // ============================================================
+    // TRAITER UN LIT
+    // ============================================================
+
     @Transactional
     public Map<String, Object> traiterLit(
             Long collecteId,
             Long litId,
             String codeContenant) {
 
-        Collecte c = findC(collecteId);
+        Collecte collecte = findC(collecteId);
 
-        if (c.getEtatCollecte() != EtatCollecte.EN_TRAITEMENT) {
+
+        if (collecte.getEtatCollecte()
+                != EtatCollecte.EN_TRAITEMENT) {
+
             throw new BusinessException(
                     "La collecte n'est plus en cours de traitement."
             );
         }
 
 
+        if (collecte.getChambreIdSqlServer() == null) {
 
-        if (c.getChambreIdSqlServer() == null) {
             throw new BusinessException(
                     "La chambre de la collecte est introuvable."
             );
         }
 
-        Lit lit = sqlLitRepo.findById(litId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Lit",
-                                "id",
-                                litId
-                        )
-                );
 
-        if (lit.getChambre() == null
-                || !Objects.equals(
-                lit.getChambre().getId(),
-                c.getChambreIdSqlServer()
-        )) {
+        if (litId == null) {
 
             throw new BusinessException(
-                    "Ce lit n'appartient pas à la chambre de cette collecte."
+                    "L'identifiant du lit est obligatoire."
             );
         }
 
 
+        if (codeContenant == null
+                || codeContenant.isBlank()) {
+
+            throw new BusinessException(
+                    "Le code du contenant est obligatoire."
+            );
+        }
+
+
+        // ========================================================
+        // CUBIX : LIT
+        // ========================================================
+
+        CubixLitDto lit =
+                cubixLitService.getById(litId);
+
+
+        if (lit == null) {
+
+            throw new BusinessException(
+                    "Lit introuvable dans Cubix : " + litId
+            );
+        }
+
+
+        // ========================================================
+        // VÉRIFIER CHAMBRE
+        // ========================================================
+
+        if (lit.getChambreId() == null
+                || !Objects.equals(
+                lit.getChambreId(),
+                collecte.getChambreIdSqlServer()
+        )) {
+
+            throw new BusinessException(
+                    "Ce lit n'appartient pas à la chambre "
+                            + "de cette collecte."
+            );
+        }
+
+
+        // ========================================================
+        // CUBIX : INFECTION
+        // ========================================================
 
         boolean infecte =
-                sqlSejourRepo.findLitsInfectes()
+                cubixLitsInfectesService
+                        .getAll()
                         .stream()
                         .anyMatch(l ->
-                                Objects.equals(l.getId(), litId)
+                                Objects.equals(
+                                        l.getId(),
+                                        litId
+                                )
                         );
 
 
         Bac bac = null;
         SacInfecte sacInfecte = null;
 
+
+        // ========================================================
+        // CONTENANT
+        // ========================================================
+
         if (infecte) {
+
+            // ----------------------------------------------------
+            // LIT INFECTÉ → SAC INFECTÉ
+            // ----------------------------------------------------
 
             sacInfecte =
                     sacInfecteRepository
-                            .findByNumeroSac(codeContenant)
+                            .findByNumeroSac(
+                                    codeContenant
+                            )
                             .orElseThrow(() ->
                                     new BusinessException(
                                             "Sac infecté introuvable : "
@@ -356,10 +689,18 @@ public class CollecteChambreService {
 
         } else {
 
+            // ----------------------------------------------------
+            // LIT NORMAL → BAC BLANC
+            // ----------------------------------------------------
+
             bac =
-                    bacRepo.findByCode(codeContenant)
+                    bacRepo.findByCode(
+                                    codeContenant
+                            )
                             .or(() ->
-                                    bacRepo.findByRfidTag(codeContenant)
+                                    bacRepo.findByRfidTag(
+                                            codeContenant
+                                    )
                             )
                             .orElseThrow(() ->
                                     new BusinessException(
@@ -368,7 +709,10 @@ public class CollecteChambreService {
                                     )
                             );
 
-            if (bac.getTypebac() != TypeBac.BLANC) {
+
+            if (bac.getTypebac()
+                    != TypeBac.BLANC) {
+
                 throw new BusinessException(
                         "Ce lit n'est pas infecté. "
                                 + "Veuillez scanner un bac BLANC."
@@ -377,6 +721,9 @@ public class CollecteChambreService {
         }
 
 
+        // ========================================================
+        // RÉCUPÉRER LES LINGES LIVRE DU LIT
+        // ========================================================
 
         List<Linge> linges =
                 lingeRepo.findByLitIdSqlServerInAndEtat(
@@ -385,37 +732,52 @@ public class CollecteChambreService {
                 );
 
 
+        // ========================================================
+        // EXCLURE LES LINGES DÉJÀ TRAITÉS
+        // ========================================================
+
         linges =
-                linges.stream()
+                linges
+                        .stream()
                         .filter(l ->
-                                !done(collecteId, l.getId())
+                                !done(
+                                        collecteId,
+                                        l.getId()
+                                )
                         )
                         .collect(Collectors.toList());
 
+
         if (linges.isEmpty()) {
+
             throw new BusinessException(
-                    "Aucun linge LIVRE à traiter pour ce lit."
+                    "Aucun linge LIVRE à traiter pour le lit "
+                            + s(lit.getCode())
             );
         }
 
 
+        // ========================================================
+        // DÉTERMINER LE NOUVEL ÉTAT
+        // ========================================================
 
         EtatLinge nouvelEtat =
                 infecte
                         ? EtatLinge.INFECTE_COLLECTE
                         : EtatLinge.COLLECTE;
 
+
         StatutCollecteLinge statut =
                 infecte
                         ? StatutCollecteLinge.INFECTE_PRESUME
                         : StatutCollecteLinge.BLANC;
+
 
         TypeCollecte typeCollecte =
                 infecte
                         ? TypeCollecte.INFECTE
                         : TypeCollecte.BLANC;
 
-        List<String> codes = new ArrayList<>();
 
         String codeContenantFinal =
                 infecte
@@ -423,84 +785,183 @@ public class CollecteChambreService {
                         : bac.getCode();
 
 
+        List<String> codes =
+                new ArrayList<>();
 
-        for (Linge l : linges) {
 
-            EtatLinge ancienEtat = l.getEtat();
+        // ========================================================
+        // TRAITER CHAQUE LINGE
+        // ========================================================
+
+        for (Linge linge : linges) {
+
+            EtatLinge ancienEtat =
+                    linge.getEtat();
+
 
             if (infecte) {
 
-                l.setSacInfecte(sacInfecte);
-
-                sacInfecteService.ajouterLingeAuSac(
-                        sacInfecte,
-                        l
+                linge.setSacInfecte(
+                        sacInfecte
                 );
+
+                sacInfecteService
+                        .ajouterLingeAuSac(
+                                sacInfecte,
+                                linge
+                        );
 
             } else {
 
-                l.setBac(bac);
+                linge.setBac(
+                        bac
+                );
             }
 
-            l.setEtat(nouvelEtat);
-            l.setStatutCollecte(statut);
-            l.setChambreIdSqlServer(null);
-            l.setTypeCollecte(typeCollecte);
-            l.setLitIdSqlServer(null);
 
-            lingeRepo.save(l);
+            // ----------------------------------------------------
+            // NOUVEL ÉTAT
+            // ----------------------------------------------------
+
+            linge.setEtat(
+                    nouvelEtat
+            );
 
 
+            linge.setStatutCollecte(
+                    statut
+            );
+
+
+            linge.setTypeCollecte(
+                    typeCollecte
+            );
+
+
+            /*
+             * IMPORTANT :
+             *
+             * Une fois le linge collecté,
+             * il n'appartient plus au lit/chambre.
+             */
+
+            linge.setLitIdSqlServer(
+                    null
+            );
+
+
+            linge.setChambreIdSqlServer(
+                    null
+            );
+
+
+            lingeRepo.save(
+                    linge
+            );
+
+
+            // ----------------------------------------------------
+            // COLLECTE LINGE
+            // ----------------------------------------------------
 
             collecteLingeRepo.save(
                     CollecteLinge.builder()
-                            .collecte(c)
-                            .linge(l)
-                            .typeCollecte(typeCollecte)
+                            .collecte(
+                                    collecte
+                            )
+
+                            .linge(
+                                    linge
+                            )
+
+                            .typeCollecte(
+                                    typeCollecte
+                            )
+
                             .numeroSacInfecte(
                                     infecte
-                                            ? sacInfecte.getNumeroSac()
+                                            ? sacInfecte
+                                              .getNumeroSac()
                                             : null
                             )
-                            .dateScan(LocalDateTime.now())
+
+                            .dateScan(
+                                    LocalDateTime.now()
+                            )
+
                             .build()
             );
 
 
+            // ----------------------------------------------------
+            // HISTORIQUE
+            // ----------------------------------------------------
 
             historiqueRepo.save(
                     HistoriqueLinge.builder()
-                            .linge(l)
-                            .etatAvant(ancienEtat)
-                            .etatApres(nouvelEtat)
-                            .personnelId(c.getPersonnelId())
+                            .linge(
+                                    linge
+                            )
+
+                            .etatAvant(
+                                    ancienEtat
+                            )
+
+                            .etatApres(
+                                    nouvelEtat
+                            )
+
+                            .personnelId(
+                                    collecte
+                                            .getPersonnelId()
+                            )
+
                             .typeOperation(
                                     infecte
                                             ? TypeOperation
                                               .DECLARATION_SAC_INFECTE
-                                            : TypeOperation.COLLECTE
+                                            : TypeOperation
+                                              .COLLECTE
                             )
-                            .dateOperation(LocalDateTime.now())
-                            .collecte(c)
+
+                            .dateOperation(
+                                    LocalDateTime.now()
+                            )
+
+                            .collecte(
+                                    collecte
+                            )
+
                             .observations(
                                     (infecte
                                             ? "INFECTE"
                                             : "BLANC")
-                                            + " lit=" + litId
+                                            + " lit="
+                                            + litId
                                             + " contenant="
                                             + codeContenantFinal
                             )
+
                             .build()
             );
 
-            codes.add(l.getCodeBarre());
+
+            codes.add(
+                    linge.getCodeBarre()
+            );
         }
 
 
+        // ========================================================
+        // RÉPONSE
+        // ========================================================
 
         return Map.of(
                 "litId",
                 litId,
+
+                "codeLit",
+                s(lit.getCode()),
 
                 "codeContenant",
                 codeContenantFinal,
@@ -522,50 +983,77 @@ public class CollecteChambreService {
     }
 
 
+    // ============================================================
+    // DÉCLARER PROPRE
+    // ============================================================
+
     @Transactional
     public Map<String, Object> declarerPropre(
             Long collecteId,
             String codeOuTag) {
 
-        Collecte c = findC(collecteId);
+        Collecte collecte =
+                findC(collecteId);
 
-        if (c.getEtatCollecte() != EtatCollecte.EN_TRAITEMENT) {
+
+        if (collecte.getEtatCollecte()
+                != EtatCollecte.EN_TRAITEMENT) {
+
             throw new BusinessException(
                     "La collecte n'est plus en cours de traitement."
             );
         }
 
-        Linge l = findL(codeOuTag);
 
-        // Vérifier que le linge appartient à la collecte
-        if (!estLingeAttendu(c, l)) {
+        Linge linge =
+                findL(codeOuTag);
+
+
+        if (!estLingeAttendu(
+                collecte,
+                linge
+        )) {
+
             throw new BusinessException(
-                    "Ce linge ne fait pas partie des linges attendus "
-                            + "pour cette collecte."
+                    "Ce linge ne fait pas partie "
+                            + "des linges attendus pour cette collecte."
             );
         }
 
-        // Déjà traité
-        if (done(collecteId, l.getId())) {
+
+        if (done(
+                collecteId,
+                linge.getId()
+        )) {
+
             throw new BusinessException(
                     "Ce linge a déjà été traité pour cette collecte."
             );
         }
 
-        // Le linge reste LIVRE.
-        // Seul le statut de collecte devient PROPRE.
-        l.setStatutCollecte(
+
+        /*
+         * Le linge reste LIVRE.
+         *
+         * Seul le statut de collecte change.
+         */
+
+        linge.setStatutCollecte(
                 StatutCollecteLinge.PROPRE
         );
 
-        lingeRepo.save(l);
+
+        lingeRepo.save(
+                linge
+        );
+
 
         return Map.of(
                 "lingeId",
-                l.getId(),
+                linge.getId(),
 
                 "codeBarre",
-                l.getCodeBarre(),
+                linge.getCodeBarre(),
 
                 "statut",
                 "PROPRE"
@@ -573,21 +1061,32 @@ public class CollecteChambreService {
     }
 
 
+    // ============================================================
+    // DÉCLARER MANQUANT
+    // ============================================================
+
     @Transactional
     public Map<String, Object> declarerManquant(
             Long collecteId,
             Long lingeId) {
 
-        Collecte c = findC(collecteId);
+        Collecte collecte =
+                findC(collecteId);
 
-        if (c.getEtatCollecte() != EtatCollecte.EN_TRAITEMENT) {
+
+        if (collecte.getEtatCollecte()
+                != EtatCollecte.EN_TRAITEMENT) {
+
             throw new BusinessException(
                     "La collecte n'est plus en cours de traitement."
             );
         }
 
-        Linge l =
-                lingeRepo.findById(lingeId)
+
+        Linge linge =
+                lingeRepo.findById(
+                                lingeId
+                        )
                         .orElseThrow(() ->
                                 new ResourceNotFoundException(
                                         "Linge",
@@ -596,54 +1095,107 @@ public class CollecteChambreService {
                                 )
                         );
 
-        // Vérifier que le linge appartient à la collecte
-        if (!estLingeAttendu(c, l)) {
+
+        if (!estLingeAttendu(
+                collecte,
+                linge
+        )) {
+
             throw new BusinessException(
-                    "Ce linge ne fait pas partie des linges attendus "
-                            + "pour cette collecte."
+                    "Ce linge ne fait pas partie "
+                            + "des linges attendus pour cette collecte."
             );
         }
 
-        if (done(collecteId, lingeId)) {
+
+        if (done(
+                collecteId,
+                lingeId
+        )) {
+
             throw new BusinessException(
                     "Ce linge a déjà été traité."
             );
         }
 
-        EtatLinge ancienEtat = l.getEtat();
 
-        l.setStatutCollecte(
+        EtatLinge ancienEtat =
+                linge.getEtat();
+
+
+        linge.setStatutCollecte(
                 StatutCollecteLinge.MANQUANT
         );
 
-        lingeRepo.save(l);
+
+        lingeRepo.save(
+                linge
+        );
+
 
         collecteLingeRepo.save(
                 CollecteLinge.builder()
-                        .collecte(c)
-                        .linge(l)
-                        .typeCollecte(TypeCollecte.MANQUANT)
-                        .dateScan(LocalDateTime.now())
+                        .collecte(
+                                collecte
+                        )
+
+                        .linge(
+                                linge
+                        )
+
+                        .typeCollecte(
+                                TypeCollecte.MANQUANT
+                        )
+
+                        .dateScan(
+                                LocalDateTime.now()
+                        )
+
                         .build()
         );
 
+
         historiqueRepo.save(
                 HistoriqueLinge.builder()
-                        .linge(l)
-                        .etatAvant(ancienEtat)
-                        .etatApres(EtatLinge.MANQUANT)
-                        .personnelId(c.getPersonnelId())
-                        .typeOperation(
-                                TypeOperation.CHANGEMENT_ETAT_LINGE
+                        .linge(
+                                linge
                         )
-                        .dateOperation(LocalDateTime.now())
-                        .collecte(c)
+
+                        .etatAvant(
+                                ancienEtat
+                        )
+
+                        .etatApres(
+                                EtatLinge.MANQUANT
+                        )
+
+                        .personnelId(
+                                collecte
+                                        .getPersonnelId()
+                        )
+
+                        .typeOperation(
+                                TypeOperation
+                                        .CHANGEMENT_ETAT_LINGE
+                        )
+
+                        .dateOperation(
+                                LocalDateTime.now()
+                        )
+
+                        .collecte(
+                                collecte
+                        )
+
                         .observations(
                                 "Manquant ch="
-                                        + c.getCodeChambre()
+                                        + collecte
+                                        .getCodeChambre()
                         )
+
                         .build()
         );
+
 
         return Map.of(
                 "lingeId",
@@ -655,44 +1207,82 @@ public class CollecteChambreService {
     }
 
 
+    // ============================================================
+    // CLÔTURER
+    // ============================================================
+
     @Transactional
-    public Map<String, Object> cloturer(Long collecteId) {
+    public Map<String, Object> cloturer(
+            Long collecteId) {
 
-        Collecte c = findC(collecteId);
+        Collecte collecte =
+                findC(collecteId);
 
-        if (c.getEtatCollecte() != EtatCollecte.EN_TRAITEMENT) {
+
+        if (collecte.getEtatCollecte()
+                != EtatCollecte.EN_TRAITEMENT) {
+
             throw new BusinessException(
                     "La collecte n'est plus en cours de traitement."
             );
         }
 
-        List<CollecteLinge> it =
-                collecteLingeRepo.findByCollecte_Id(collecteId);
+
+        List<CollecteLinge> items =
+                collecteLingeRepo
+                        .findByCollecte_Id(
+                                collecteId
+                        );
+
 
         long blancs =
-                cnt(it, TypeCollecte.BLANC);
+                cnt(
+                        items,
+                        TypeCollecte.BLANC
+                );
+
 
         long infectes =
-                cnt(it, TypeCollecte.INFECTE);
+                cnt(
+                        items,
+                        TypeCollecte.INFECTE
+                );
+
 
         long manquants =
-                cnt(it, TypeCollecte.MANQUANT);
+                cnt(
+                        items,
+                        TypeCollecte.MANQUANT
+                );
 
-        long attendus = c.getNbAttendus();
 
-        // Les propres ne sont pas enregistrés dans CollecteLinge.
+        long attendus =
+                collecte.getNbAttendus();
+
+
+        /*
+         * Les PROPRE ne sont pas enregistrés
+         * dans CollecteLinge.
+         *
+         * Ils sont donc calculés.
+         */
+
         long propres =
                 attendus
                         - blancs
                         - infectes
                         - manquants;
 
+
         if (propres < 0) {
+
             throw new BusinessException(
                     "Incohérence des quantités : "
-                            + "BLANC + INFECTE + MANQUANT > ATTENDU."
+                            + "BLANC + INFECTE + MANQUANT "
+                            + "> ATTENDU."
             );
         }
+
 
         long totalTraites =
                 blancs
@@ -700,10 +1290,12 @@ public class CollecteChambreService {
                         + propres
                         + manquants;
 
+
         if (totalTraites != attendus) {
 
             long restant =
                     attendus - totalTraites;
+
 
             throw new BusinessException(
                     "La collecte ne peut pas être clôturée. "
@@ -713,26 +1305,63 @@ public class CollecteChambreService {
             );
         }
 
-        c.setNbScannésBlanc((int) blancs);
-        c.setNbInfectésPrésumés((int) infectes);
-        c.setNbPropres((int) propres);
-        c.setNbManquants((int) manquants);
 
-        c.setDateFin(LocalDateTime.now());
+        collecte.setNbScannésBlanc(
+                (int) blancs
+        );
 
-        // IMPORTANT :
-        // Remplacer TERMINEE par le nom exact de ton enum
-        // si ton enum utilise un autre nom.
-        c.setEtatCollecte(EtatCollecte.EN_TRAITEMENT);
 
-        collecteRepo.save(c);
+        collecte.setNbInfectésPrésumés(
+                (int) infectes
+        );
+
+
+        collecte.setNbPropres(
+                (int) propres
+        );
+
+
+        collecte.setNbManquants(
+                (int) manquants
+        );
+
+
+        collecte.setDateFin(
+                LocalDateTime.now()
+        );
+
+
+        /*
+         * IMPORTANT :
+         *
+         * Je conserve EN_TRAITEMENT ici car ton enum fourni
+         * ne permet pas de confirmer le nom de l'état final.
+         *
+         * Si tu as TERMINEE dans EtatCollecte :
+         *
+         * collecte.setEtatCollecte(
+         *      EtatCollecte.TERMINEE
+         * );
+         */
+
+        collecte.setEtatCollecte(
+                EtatCollecte.EN_TRAITEMENT
+        );
+
+
+        collecteRepo.save(
+                collecte
+        );
+
 
         return Map.of(
                 "collecteId",
                 collecteId,
 
                 "codeChambre",
-                s(c.getCodeChambre()),
+                s(
+                        collecte.getCodeChambre()
+                ),
 
                 "nbAttendus",
                 attendus,
@@ -758,12 +1387,22 @@ public class CollecteChambreService {
     }
 
 
-    private Personnel find(String m) {
-        return personnelReo.findByCodeBarre(m);
-    }
+    // ============================================================
+    // FIND COLLECTE
+    // ============================================================
 
     private Collecte findC(Long id) {
-        return collecteRepo.findById(id)
+
+        if (id == null) {
+
+            throw new IllegalArgumentException(
+                    "L'identifiant de la collecte est obligatoire."
+            );
+        }
+
+
+        return collecteRepo
+                .findById(id)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Collecte",
@@ -773,22 +1412,44 @@ public class CollecteChambreService {
                 );
     }
 
-    private Linge findL(String c) {
+
+    // ============================================================
+    // FIND LINGE
+    // ============================================================
+
+    private Linge findL(String code) {
+
+        if (code == null || code.isBlank()) {
+
+            throw new BusinessException(
+                    "Le code ou RFID du linge est obligatoire."
+            );
+        }
+
+
         return lingeRepo
-                .findByCodeBarre(c)
+                .findByCodeBarre(code)
                 .or(() ->
-                        lingeRepo.findByBarcodeOrRfid(c)
+                        lingeRepo.findByBarcodeOrRfid(code)
                 )
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Linge",
                                 "code",
-                                c
+                                code
                         )
                 );
     }
 
-    private boolean done(Long collecteId, Long lingeId) {
+
+    // ============================================================
+    // VÉRIFIER SI LE LINGE A DÉJÀ ÉTÉ TRAITÉ
+    // ============================================================
+
+    private boolean done(
+            Long collecteId,
+            Long lingeId) {
+
         return collecteLingeRepo
                 .existsByCollecte_IdAndLinge_Id(
                         collecteId,
@@ -796,54 +1457,117 @@ public class CollecteChambreService {
                 );
     }
 
+
+    // ============================================================
+    // COMPTER UN TYPE
+    // ============================================================
+
     private long cnt(
-            List<CollecteLinge> it,
+            List<CollecteLinge> items,
             TypeCollecte type) {
 
-        return it.stream()
-                .filter(i ->
-                        type == i.getTypeCollecte()
+        return items
+                .stream()
+                .filter(item ->
+                        type == item.getTypeCollecte()
                 )
                 .count();
     }
 
-    private String s(String v) {
-        return v != null ? v : "";
+
+    // ============================================================
+    // STRING NULL SAFE
+    // ============================================================
+
+    private String s(String value) {
+
+        return value != null
+                ? value
+                : "";
     }
 
+
+    // ============================================================
+    // VÉRIFIER QU'UN LINGE APPARTIENT À LA COLLECTE
+    // ============================================================
 
     private boolean estLingeAttendu(
             Collecte collecte,
             Linge linge) {
 
+        if (collecte == null) {
+            return false;
+        }
+
+
+        if (linge == null) {
+            return false;
+        }
+
+
         if (collecte.getChambreIdSqlServer() == null) {
             return false;
         }
+
 
         if (linge.getLitIdSqlServer() == null) {
             return false;
         }
 
-        // Le linge doit être LIVRE pour faire partie
-        // des linges attendus.
-        if (linge.getEtat() != EtatLinge.LIVRE) {
+
+        /*
+         * Le linge doit encore être LIVRE.
+         */
+
+        if (linge.getEtat()
+                != EtatLinge.LIVRE) {
+
             return false;
         }
 
-        List<Linge> attendus =
-                lingeRepo.findByLitIdSqlServerInAndEtat(
-                        List.of(linge.getLitIdSqlServer()),
-                        EtatLinge.LIVRE
-                );
 
-        return attendus.stream()
-                .anyMatch(l ->
-                        Objects.equals(
-                                l.getId(),
-                                linge.getId()
-                        )
-                );
+        /*
+         * On vérifie que le linge possède bien un lit.
+         */
+
+        Long litId =
+                linge.getLitIdSqlServer();
+
+
+        /*
+         * On récupère tous les linges LIVRE
+         * du même lit.
+         *
+         * Si le linge est présent, il est bien
+         * rattaché à un lit.
+         */
+
+        List<Linge> lingesDuLit =
+                lingeRepo
+                        .findByLitIdSqlServerInAndEtat(
+                                List.of(litId),
+                                EtatLinge.LIVRE
+                        );
+
+
+        boolean existe =
+                lingesDuLit
+                        .stream()
+                        .anyMatch(l ->
+                                Objects.equals(
+                                        l.getId(),
+                                        linge.getId()
+                                )
+                        );
+
+
+        if (!existe) {
+            return false;
+        }
+
+
+
+
+        return true;
     }
 }
-
-
