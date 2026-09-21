@@ -4,7 +4,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.*;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.*;
+import tn.softsys.buanderie.Sqlserver.dtos.PersonnelDto;
+import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
 import tn.softsys.buanderie.exception.*;
@@ -27,14 +28,12 @@ public class CollecteUniformeService {
     private final HistoriqueLingeRepository historiqueRepo;
     private final SqlServerPersonnelRepository sqlPersonnelRepo;
     private final SqlServerSejourRepository sqlSejourRepo;
-
+    private final CubixPersonnelService cubixPersonnelService;
     public Map<String, Object> ouvrirUniforme(
             String matriculeAgent,
             String codeBadge) {
 
-
-
-        Personnel p = sqlPersonnelRepo.findByCodeBarre(codeBadge);
+        PersonnelDto p = cubixPersonnelService.getByCode(codeBadge);
 
         if (p == null) {
             throw new BusinessException(
@@ -67,12 +66,12 @@ public class CollecteUniformeService {
 
         uf.forEach(l -> {
 
-            if (l.getStatutCollecte()
-                    == StatutCollecteLinge.PROPRE) {
+          //  if (l.getStatutCollecte()
+            //        == StatutCollecteLinge.PROPRE) {
 
                 l.setStatutCollecte(null);
                 lingeRepo.save(l);
-            }
+         //   }
         });
 
 

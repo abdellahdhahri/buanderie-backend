@@ -7,6 +7,8 @@ import org.springframework.web.bind.annotation.*;
 import tn.softsys.buanderie.Sqlserver.dtos.ServiceDTO;
 import tn.softsys.buanderie.Sqlserver.sqlServerServices.SqlServerServiceService;
 
+import java.util.List;
+
 @RestController("sqlServerServiceController")
 @RequestMapping("/api/sqlserver/services")
 @RequiredArgsConstructor
@@ -17,11 +19,11 @@ public class ServiceController {
     private final SqlServerServiceService serviceService;
 
     @GetMapping
-    public Page<ServiceDTO> getAllServices(
+    public List<ServiceDTO> getAllServices(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size
     ) {
-        return serviceService.getAllServices(page, size);
+        return serviceService.getAllServices();
     }
 
     @GetMapping("/{id}")

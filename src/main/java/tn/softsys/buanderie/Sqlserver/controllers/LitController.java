@@ -2,11 +2,11 @@ package tn.softsys.buanderie.Sqlserver.controllers;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
-import tn.softsys.buanderie.Sqlserver.dtos.LitDTO;
-import tn.softsys.buanderie.Sqlserver.sqlServerServices.SqlServerLitService;
-
+import tn.softsys.buanderie.Sqlserver.Cubix.CubixLitService;
+import tn.softsys.buanderie.Sqlserver.Cubix.CubixLitsInfectesService;
+import tn.softsys.buanderie.Sqlserver.dtos.CubixLitDto;
+import tn.softsys.buanderie.Sqlserver.dtos.CubixLitInfecteDto;
 
 import java.util.List;
 
@@ -14,70 +14,36 @@ import java.util.List;
 @RequestMapping("/api/sqlserver/lits")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "http://localhost:3000")
-@Tag(name = "Lit SQL Server", description = "Consultation des lits depuis SQL Server")
+@Tag(
+        name = "Lit SQL Server",
+        description = "Consultation des lits depuis Cubix"
+)
 public class LitController {
 
-    private final SqlServerLitService litService;
+    private final CubixLitService litService;
+    private final CubixLitsInfectesService litsInfectesService;
 
-    @GetMapping
-    public Page<LitDTO> getAllLits(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size
+
+
+    @GetMapping("/{code}")
+    public CubixLitDto getLitByCode(
+            @PathVariable String code
     ) {
-        return litService.getAllLits(page, size);
+        return litService.getByCode(code);
     }
-    @GetMapping("/lits-infectes")
-    public List<LitDTO> getLitsInfectes() {
 
-        return litService.getLitsInfectes();
-    }
-//    @GetMapping("/{id}")
-//    public LitDTO getLitById(@PathVariable Long id) {
-//        return litService.getLitById(id);
-//    }
-//    @GetMapping("/chambre/{chambreId}")
-//    public Page<LitDTO> getLitsByChambreId(
-//            @PathVariable Long chambreId,
-//            @RequestParam(defaultValue = "0") int page,
-//            @RequestParam(defaultValue = "200") int size
-//    ) {
-//        return litService.getLitsByChambreId(chambreId, page, size);
-//    }
 
 
     @GetMapping("/chambre/{chambreId}")
-    public Page<LitDTO> getLitsByChambre(
-            @PathVariable Long chambreId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size
+    public List<CubixLitDto> getLitsByChambre(
+            @PathVariable Long chambreId
     ) {
-
-        return litService.getLitsByChambreId(
-                chambreId,
-                page,
-                size
-        );
+        return litService.getByChambreId(chambreId);
     }
 
 
-
-
-    @GetMapping("/etat/{etat}")
-    public Page<LitDTO> getLitsByEtat(
-            @PathVariable Integer etat,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "200") int size
-    ) {
-        return litService.getLitsByEtat(etat, page, size);
+    @GetMapping("/lits-infectes")
+    public List<CubixLitInfecteDto> getLitsInfectes() {
+        return litsInfectesService.getAll();
     }
-    @GetMapping("/libres")
-    public List<LitDTO> getLitsLibres() {
-        return litService.getLitsLibres();
-    }
-
-    @GetMapping("/occupes")
-    public List<LitDTO> getLitsOccupes() {
-        return litService.getLitsOccupes();
-    }
-
 }

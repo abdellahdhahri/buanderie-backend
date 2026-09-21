@@ -15,6 +15,7 @@ import tn.softsys.buanderie.service.Reporting.NotificationService;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 
 @Service
@@ -61,6 +62,7 @@ public class CycleSechageService {
                                     String matriculeAgent,
                                     Double poidsCharge) {
 
+
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
 
         if (agent == null) {
@@ -87,7 +89,7 @@ public class CycleSechageService {
                 .orElseThrow(() -> new ResourceNotFoundException("Lot", "code", codeLot));
 
         // Vérifier que les linges sont LAVÉS (prêts pour séchage)
-        List<Linge> linges = lingeRepository.findByLot_CodeLot(codeLot);
+        List<Linge> linges = lingeRepository.findByLot_Id(lot.getId());
         if (linges.isEmpty())
             throw new BusinessException("Lot vide : " + codeLot);
 

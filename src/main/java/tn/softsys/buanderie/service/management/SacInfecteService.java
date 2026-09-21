@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerServiceRepository;
 import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
+import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
 import tn.softsys.buanderie.dto.SacsInfectes.AffectationLingesPropresRequest;
 import tn.softsys.buanderie.dto.SacsInfectes.SacInfecteDTO;
 import tn.softsys.buanderie.dto.SacsInfectes.SacInfecteItemRequest;
@@ -46,6 +47,8 @@ public class SacInfecteService {
     private final SqlServerPersonnelRepository personnelRepository;
 
     private final SqlServerPersonnelRepository sqlPersonnelRepo;
+
+    private final CubixPersonnelService cubixPersonnelService;
 
 
     public SacInfecte creerSac(SacInfecteDTO sacInfecteDTO){

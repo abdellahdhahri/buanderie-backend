@@ -23,7 +23,7 @@ public class ReceptionDTO {
             .bacId(r.getBac().getId())
             .bacReference(r.getBac().getReference())
             .chambreId(r.getChambre() != null ? r.getChambre().getId() : null)
-            .chambreNumero(r.getChambre() != null ? r.getChambre().getNumero() : null)
+            //.chambreNumero(r.getChambre() != null ? r.getChambre().getNumero() : null)
             .agentMatricule(r.getAgent().getMatricule())
             .agentNom(r.getAgent().getPrenom() + " " + r.getAgent().getNom())
            // .dateReception(r.getDateReception())

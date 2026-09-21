@@ -5,15 +5,18 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import tn.softsys.buanderie.Sqlserver.Cubix.CubixChambreService;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerChambreRepository;
 import tn.softsys.buanderie.Sqlserver.dtos.ChambreDTO;
 import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Chambre;
+import tn.softsys.buanderie.dto.ChambreDto;
 
 @Service("sqlServerChambreService")
 @RequiredArgsConstructor
 public class SqlServerChambreService {
 
     private final SqlServerChambreRepository chambreRepository;
+    private final CubixChambreService cubixChambreService;
 
     public Page<ChambreDTO> getAllChambres(int page, int size) {
         return chambreRepository
@@ -32,10 +35,11 @@ public class SqlServerChambreService {
                 .findByServiceId(serviceId, PageRequest.of(page, size))
                 .map(this::mapToDTO);
     }
-    public ChambreDTO getChambreByCodeBarre(String code){
-        Chambre chambre =  chambreRepository.findByCodeBarre(code)
-                .orElseThrow(() -> new RuntimeException("Chambre SQL Server introuvable"));
-        return mapToDTO(chambre);
+    public ChambreDto getChambreByCodeBarre(String code){
+        ChambreDto chambre =  cubixChambreService.getByCodeBarre(code);
+               // .orElseThrow(() -> new RuntimeException("Chambre SQL Server introuvable"));
+        //return mapToDTO(chambre);
+        return chambre;
     }
 
 
