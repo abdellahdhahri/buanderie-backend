@@ -46,6 +46,7 @@ public class ReceptionService {
                 Bac bac = bacRepository.findByCode(codeBac)
                         .orElseThrow(() -> new RuntimeException("Bac introuvable : " + codeBac));
                 bac.setEtat(EtatBac.EN_RECEPTION);
+                bac.setPoids(null);
                 bacRepository.save(bac);
                 ReceptionBac reception = ReceptionBac.builder()
                         .codeBac(bac.getCode())

@@ -4,8 +4,10 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerServiceRepository;
+import tn.softsys.buanderie.Sqlserver.dtos.PersonnelDto;
 import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
 import tn.softsys.buanderie.dto.Collectes.ResumeCollecteDTO;
 import tn.softsys.buanderie.dto.ResumeCategorieDTO;
@@ -41,6 +43,7 @@ public class RemiseLingeService {
     private final SqlServerPersonnelRepository personnelRepository;
 
     private final CollecteResumeService collecteService;
+    private final CubixPersonnelService personnelService;
 
 
 
@@ -51,8 +54,8 @@ public class RemiseLingeService {
     ) {
 
 
-        Personnel personnelRemise =
-                personnelRepository.findByCodeBarre(matriculeAgentRemise);
+        PersonnelDto personnelRemise =
+                personnelService.getByCode(matriculeAgentRemise);
 
         if (personnelRemise == null) {
             throw new ResourceNotFoundException(

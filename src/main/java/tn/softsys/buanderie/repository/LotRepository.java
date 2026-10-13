@@ -24,4 +24,5 @@ public interface LotRepository
             CategLinge categorie,
             EtatLot etat);
     List<Lot> findByEtat(EtatLot etatLot);
+    boolean existsByCodeLot(String codeLot);
 }

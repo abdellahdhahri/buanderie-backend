@@ -1,11 +1,12 @@
 
-        package tn.softsys.buanderie.controller;
+package tn.softsys.buanderie.controller;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import tn.softsys.buanderie.service.Process.CollecteChambreService;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -47,13 +48,15 @@ public class CollecteChambreController {
     public ResponseEntity<Map<String, Object>> traiterLit(
             @PathVariable Long collecteId,
             @RequestParam Long litId,
-            @RequestParam String codeContenant) {
+            @RequestParam String codeContenant,
+            @RequestBody(required = false) List<Long> lingeIds) {
 
         return ResponseEntity.ok(
                 service.traiterLit(
                         collecteId,
                         litId,
-                        codeContenant
+                        codeContenant,
+                        lingeIds
                 )
         );
     }
@@ -94,6 +97,32 @@ public class CollecteChambreController {
         return ResponseEntity.ok(
                 service.cloturer(collecteId)
         );
+    }
+    @PostMapping("/{collecteId}/annuler-si-vide")
+    public ResponseEntity<Map<String, Object>> annulerCollecteSiVide(
+            @PathVariable Long collecteId) {
+
+        return ResponseEntity.ok(
+                service.annulerCollecteSiVide(
+                        collecteId
+                )
+        );
+    }
+
+    @PostMapping("/declarer-linge-infecte")
+    public ResponseEntity<Map<String, Object>> declarerLingeInfecte(
+            @RequestParam Long collecteId,
+            @RequestParam Long lingeId,
+            @RequestParam String codeSacInfecte) {
+
+        Map<String, Object> result =
+                service.declarerLingeInfecte(
+                        collecteId,
+                        lingeId,
+                        codeSacInfecte
+                );
+
+        return ResponseEntity.ok(result);
     }
 }
 

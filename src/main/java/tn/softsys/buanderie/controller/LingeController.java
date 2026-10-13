@@ -37,7 +37,7 @@ public class LingeController {
     private final CubixImportClient cubixImportClient;
 
 
-   // @PreAuthorize("hasAuthority('LIG1305')")
+    // @PreAuthorize("hasAuthority('LIG1305')")
     @Operation(summary = "Récupérer les linges avec pagination et filtres")
     @GetMapping("/paged")
     public Page<LingeDTO> getLingesPaged(
@@ -93,12 +93,12 @@ public class LingeController {
 
         return lingeService.getHistoriqueLingeByCodeBarre(codeBarre);
     }
- /*   @GetMapping("/Linge/origin/{id}")
-    public Collecte getOrigin(@PathVariable Long id) {
+    /*   @GetMapping("/Linge/origin/{id}")
+       public Collecte getOrigin(@PathVariable Long id) {
 
-        return lingeService.getLingeInfo(id);
-    }*/
- @Operation(summary = "Récupérer les linges d'un lot")
+           return lingeService.getLingeInfo(id);
+       }*/
+    @Operation(summary = "Récupérer les linges d'un lot")
 
     @GetMapping("/lots/{codeLot}/linges")
     public List<Linge> getLingesByLot(
@@ -136,7 +136,7 @@ public class LingeController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
 
-        return cubixImportClient.getLinges(page, size);
+        return lingeImportService.getLingesAImporter(page, size);
     }
     @PostMapping("/import")
     public ResponseEntity<?> importerLinges(

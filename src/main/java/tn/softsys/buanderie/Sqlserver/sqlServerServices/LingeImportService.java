@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +28,27 @@ public class LingeImportService {
     private final CubixImportClient cubixImportClient;
 
     private final LingeRepository lingeRepository;
+
+    private final CategorieLingeResolver categorieLingeResolver;
+
+
+    public Page<LingeImportableProjectionDto> getLingesAImporter(
+            int page,
+            int size) {
+
+        Page<LingeImportableProjectionDto> resultat =
+                cubixImportClient.getLinges(page, size);
+
+        resultat.getContent().forEach(linge ->
+                linge.setCategorieSuggeree(
+                        categorieLingeResolver.resoudre(
+                                linge.getDesignation()
+                        )
+                )
+        );
+
+        return resultat;
+    }
 
 
     /**
@@ -170,16 +192,11 @@ public class LingeImportService {
             // -----------------------------------------------------
 
             CategLinge categorie =
-                    request.getCategorie();
-
-
-            if (categorie == null) {
-
-                throw new RuntimeException(
-                        "La catégorie est obligatoire pour le linge "
-                                + source.getId()
-                );
-            }
+                    request.getCategorie() != null
+                            ? request.getCategorie()
+                            : categorieLingeResolver.resoudre(
+                            source.getDesignation()
+                    );
 
 
             // -----------------------------------------------------

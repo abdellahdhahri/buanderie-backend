@@ -94,4 +94,40 @@ public interface HistoriqueLingeRepository extends JpaRepository<HistoriqueLinge
     List<HistoriqueLinge> findHistoriqueByLingeIds(
             @Param("lingeIds") List<Long> lingeIds
     );
+    @Query(value = """
+        SELECT h.personnel_id, COUNT(h.id)
+        FROM historiques_linge h
+        WHERE (CAST(:debut AS timestamp) IS NULL OR h.date_operation >= CAST(:debut AS timestamp))
+          AND (CAST(:fin AS timestamp) IS NULL OR h.date_operation <= CAST(:fin AS timestamp))
+        GROUP BY h.personnel_id
+        ORDER BY COUNT(h.id) DESC
+        """, nativeQuery = true)
+    List<Object[]> countTotalParPersonnel(
+            @Param("debut") LocalDateTime debut,
+            @Param("fin") LocalDateTime fin
+    );
+
+    @Query(value = """
+        SELECT h.personnel_id, h.type_operation, COUNT(h.id)
+        FROM historiques_linge h
+        WHERE (CAST(:debut AS timestamp) IS NULL OR h.date_operation >= CAST(:debut AS timestamp))
+          AND (CAST(:fin AS timestamp) IS NULL OR h.date_operation <= CAST(:fin AS timestamp))
+        GROUP BY h.personnel_id, h.type_operation
+        """, nativeQuery = true)
+    List<Object[]> countParPersonnelEtType(
+            @Param("debut") LocalDateTime debut,
+            @Param("fin") LocalDateTime fin
+    );
+
+    @Query(value = """
+        SELECT h.personnel_id, MIN(h.date_operation), MAX(h.date_operation)
+        FROM historiques_linge h
+        WHERE (CAST(:debut AS timestamp) IS NULL OR h.date_operation >= CAST(:debut AS timestamp))
+          AND (CAST(:fin AS timestamp) IS NULL OR h.date_operation <= CAST(:fin AS timestamp))
+        GROUP BY h.personnel_id
+        """, nativeQuery = true)
+    List<Object[]> periodeActiviteParPersonnel(
+            @Param("debut") LocalDateTime debut,
+            @Param("fin") LocalDateTime fin
+    );
 }

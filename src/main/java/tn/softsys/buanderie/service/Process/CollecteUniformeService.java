@@ -33,6 +33,15 @@ public class CollecteUniformeService {
             String matriculeAgent,
             String codeBadge) {
 
+
+        PersonnelDto agent = cubixPersonnelService.getByCode(matriculeAgent);
+//                .orElseThrow(() ->
+//                        new ResourceNotFoundException(
+//                                "Agent",
+//                                "matricule",
+//                                matriculeAgent
+//                        )
+//                );
         PersonnelDto p = cubixPersonnelService.getByCode(codeBadge);
 
         if (p == null) {
@@ -94,8 +103,7 @@ public class CollecteUniformeService {
                 collecteRepo.save(
                         Collecte.builder()
 
-                                // ID du Personnel SQL Server
-                                .personnelId(personnelId)
+                                .personnelId(agent.getId())
 
                                 .typeCollecte(
                                         TypeCollecte.MIXTE
