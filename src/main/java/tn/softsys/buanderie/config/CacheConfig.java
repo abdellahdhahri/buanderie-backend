@@ -33,7 +33,9 @@ public class CacheConfig {
                         "lits-chambre",
                         "personnels-all",
                         "personnels-id",
-                        "personnels-code"
+                        "personnels-code",
+                        "arsenaux",
+                        "emplacements-arsenal"
                 );
 
         cacheManager.setCaffeine(caffeine);

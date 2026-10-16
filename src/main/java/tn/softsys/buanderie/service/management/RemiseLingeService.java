@@ -4,8 +4,10 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerServiceRepository;
+import tn.softsys.buanderie.Sqlserver.dtos.PersonnelDto;
 import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
 import tn.softsys.buanderie.dto.Collectes.ResumeCollecteDTO;
 import tn.softsys.buanderie.dto.ResumeCategorieDTO;
@@ -21,6 +23,7 @@ import tn.softsys.buanderie.repository.AgentRepository;
 import tn.softsys.buanderie.repository.CollecteRepository;
 import tn.softsys.buanderie.repository.LingeRepository;
 import tn.softsys.buanderie.repository.RemiseLingeItemRepository;
+import tn.softsys.buanderie.repository.RemiseLingeLingeRepository;
 import tn.softsys.buanderie.repository.RemiseLingeRepository;
 import tn.softsys.buanderie.repository.ServiceRepository;
 
@@ -33,14 +36,14 @@ public class RemiseLingeService {
 
     private final RemiseLingeRepository remiseLingeRepository;
     private final RemiseLingeItemRepository remiseLingeItemRepository;
+    private final RemiseLingeLingeRepository remiseLingeLingeRepository;
 
     private final CollecteRepository collecteRepository;
     private final LingeRepository lingeRepository;
-    private final AgentRepository agentRepository;
     private final SqlServerServiceRepository serviceRepository;
-    private final SqlServerPersonnelRepository personnelRepository;
 
     private final CollecteResumeService collecteService;
+    private final CubixPersonnelService personnelService;
 
 
 
@@ -51,8 +54,8 @@ public class RemiseLingeService {
     ) {
 
 
-        Personnel personnelRemise =
-                personnelRepository.findByCodeBarre(matriculeAgentRemise);
+        PersonnelDto personnelRemise =
+                personnelService.getByCode(matriculeAgentRemise);
 
         if (personnelRemise == null) {
             throw new ResourceNotFoundException(
@@ -61,9 +64,6 @@ public class RemiseLingeService {
                     matriculeAgentRemise
             );
         }
-
-
-
         Collecte collecte =
                 collecteRepository
                         .findFirstByPersonnelIdAndEtatCollecteNotOrderByDateCollecteDesc(
@@ -77,9 +77,6 @@ public class RemiseLingeService {
                                         id
                                 )
                         );
-
-
-
         if (collecte.getService() == null) {
 
             throw new RuntimeException(
@@ -126,7 +123,7 @@ public class RemiseLingeService {
                 RemiseLinge.builder()
                         .collecte(collecte)
                         .service(service.get().getId())
-                       .personnelId(personnelRemise.getId())
+                        .personnelId(personnelRemise.getId())
                         .dateLivraison(LocalDateTime.now())
                         .etat(EtatLivraison.EN_COURS)
                         .build();
@@ -158,17 +155,11 @@ public class RemiseLingeService {
                             categorie
                     );
 
-
-
-
             int resteAremettre =
                     Math.max(
                             0,
                             quantiteCollectee - dejaRemise
                     );
-
-
-
 
             int stockDisponible =
                     getStockDisponible(
@@ -492,7 +483,6 @@ public class RemiseLingeService {
                                 remiseId
                         )
                 );
-
         // Rechercher le linge avec son code-barres
         Linge linge = lingeRepository.findByCodeBarre(codeBarre)
                 .orElseThrow(() ->
@@ -549,8 +539,17 @@ public class RemiseLingeService {
 
         //  Passer le linge à LIVRE
         linge.setEtat(EtatLinge.LIVRE);
+        linge.setArsenalEmplacementID(null);
 
         lingeRepository.save(linge);
+
+        remiseLingeLingeRepository.save(
+                RemiseLingeLinge.builder()
+                        .remiseLinge(remise)
+                        .linge(linge)
+                        .categorie(linge.getCategorie())
+                        .build()
+        );
 
         // Incrémenter la quantité remise
         item.setQuantiteRemise(

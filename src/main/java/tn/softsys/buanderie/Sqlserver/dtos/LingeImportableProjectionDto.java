@@ -2,6 +2,7 @@ package tn.softsys.buanderie.Sqlserver.dtos;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
+import tn.softsys.buanderie.entity.enums.CategLinge;
 
 @Data
 public class LingeImportableProjectionDto {
@@ -26,4 +27,7 @@ public class LingeImportableProjectionDto {
 
     @JsonProperty("NumeroSerie")
     private String numeroSerie;
+
+    @JsonProperty("CategorieSuggeree")
+    private CategLinge categorieSuggeree;
 }

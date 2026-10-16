@@ -13,6 +13,8 @@ import tn.softsys.buanderie.repository.NotificationRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -92,6 +94,55 @@ public class NotificationService {
                 .build();
 
         envoyer(notification);
+    }
+
+
+    @Transactional
+    public void notifierLingesIncomplets(int total, Map<String, Long> parAttribut, List<String> exemples) {
+
+        List<Notification> anciennes =
+                notificationRepository
+                        .findByLueFalseOrderByDateCreationDesc()
+                        .stream()
+                        .filter(n -> "LINGES_INCOMPLETS".equals(n.getType()))
+                        .collect(Collectors.toList());
+
+        anciennes.forEach(n -> n.setLue(true));
+        notificationRepository.saveAll(anciennes);
+
+        String detail = parAttribut.entrySet()
+                .stream()
+                .filter(e -> e.getValue() > 0)
+                .map(e -> libelleAttribut(e.getKey()) + " : " + e.getValue())
+                .collect(Collectors.joining(", "));
+
+        String message = total + " linge(s) avec des attributs manquants (" + detail + ")."
+                + (exemples.isEmpty() ? "" : " Ex. : " + String.join(", ", exemples));
+
+        if (message.length() > 500) {
+            message = message.substring(0, 497) + "...";
+        }
+
+        Notification notification = Notification.builder()
+                .titre("Linges incomplets")
+                .message(message)
+                .type("LINGES_INCOMPLETS")
+                .dateCreation(LocalDateTime.now())
+                .lue(false)
+                .build();
+
+        envoyer(notification);
+    }
+
+    private String libelleAttribut(String attribut) {
+        return switch (attribut) {
+            case "POIDS" -> "sans poids";
+            case "DUREE_VIE" -> "sans durée de vie";
+            case "CATEGORIE" -> "sans catégorie";
+            case "SERVICE" -> "sans service";
+            case "DESIGNATION" -> "sans désignation";
+            default -> attribut;
+        };
     }
 
 

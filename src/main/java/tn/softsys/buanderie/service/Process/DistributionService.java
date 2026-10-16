@@ -127,6 +127,7 @@ public class DistributionService {
         linge.setPorteurNom(null);
         linge.setEtat(EtatLinge.LIVRE);
         linge.setStatutCollecte(null);
+        linge.setArsenalEmplacementID(null);
         linge.setEmplacement(null);
 
         lingeRepo.save(linge);

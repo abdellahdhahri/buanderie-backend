@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import tn.softsys.buanderie.dto.LingeDTO;
 import tn.softsys.buanderie.dto.Lot.LotDTO;
 import tn.softsys.buanderie.entity.Linge;
+import tn.softsys.buanderie.entity.enums.CategLinge;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
 import tn.softsys.buanderie.entity.enums.EtatLot;
 import tn.softsys.buanderie.entity.Lot;
@@ -15,12 +16,29 @@ import tn.softsys.buanderie.repository.LotRepository;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class LotService {
     private final LotRepository lotRepository;
     private final LingeRepository lingeRepository;
+    private static final Map<CategLinge, String> ABREVIATIONS = new EnumMap<>(CategLinge.class);
+
+    static {
+        ABREVIATIONS.put(CategLinge.DRAP, "DRP");
+        ABREVIATIONS.put(CategLinge.TAIE_OREILLER, "TAI");
+        ABREVIATIONS.put(CategLinge.COUETTE, "COU");
+        ABREVIATIONS.put(CategLinge.CHAMP_OPERATOIRE, "CHO");
+        ABREVIATIONS.put(CategLinge.SERVIETTE_BAIN, "SVB");
+        ABREVIATIONS.put(CategLinge.SERVIETTE_VISAGE, "SVV");
+        ABREVIATIONS.put(CategLinge.SERVIETTE_TABLE, "SVT");
+        ABREVIATIONS.put(CategLinge.PEIGNOIR, "PEI");
+        ABREVIATIONS.put(CategLinge.NAPPE, "NAP");
+        ABREVIATIONS.put(CategLinge.UNIFORME, "UNI");
+        ABREVIATIONS.put(CategLinge.AUTRE, "AUT");
+    }
     public LotService(LotRepository lotRepository, LingeRepository lingeRepository) {
         this.lotRepository = lotRepository;
         this.lingeRepository = lingeRepository;
@@ -41,17 +59,7 @@ public class LotService {
         lot.setEtat(EtatLot.EN_TRI);
         lot.setDateCreation(LocalDateTime.now());
 
-        String type = dto.getTypeCollecte().name().substring(0, 2).toUpperCase();
-        String categorie = dto.getCategorie().name().substring(0, 2).toUpperCase();
-
-        String date = LocalDateTime.now()
-                .format(DateTimeFormatter.ofPattern("yyMMdd"));
-
-        lot.setCodeLot(
-                type + "-" +
-                        categorie + "-" +
-                        date
-        );
+        lot.setCodeLot(genererCodeLot(dto));
 
         return lotRepository.save(lot);
     }
@@ -126,5 +134,29 @@ public class LotService {
     }
     public List<Lot> findLotTriee(EtatLot etatLot){
         return lotRepository.findByEtat(etatLot);
+    }
+    private String genererCodeLot(LotDTO dto) {
+        String type = dto.getTypeCollecte().name().substring(0, 2).toUpperCase();
+
+        String nomCategorie = dto.getCategorie().name();
+        String categorie = ABREVIATIONS.getOrDefault(
+                dto.getCategorie(),
+                nomCategorie.substring(0, Math.min(3, nomCategorie.length()))
+        );
+
+        String date = LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyMMdd"));
+
+        String prefixe = type + "-" + categorie + "-" + date + "-";
+
+        int sequence = 1;
+        String code = prefixe + String.format("%02d", sequence);
+
+        while (lotRepository.existsByCodeLot(code)) {
+            sequence++;
+            code = prefixe + String.format("%02d", sequence);
+        }
+
+        return code;
     }
 }

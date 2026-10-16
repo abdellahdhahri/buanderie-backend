@@ -31,6 +31,10 @@ public class StockageService {
     private final ArsenalRepository arsenalRepository;
     private final NotificationService notificationService;
     private final SqlServerPersonnelRepository sqlPersonnelRepo;
+
+
+
+
     @Transactional
     public Linge Stocker(StockageRequest request) {
 
@@ -59,7 +63,6 @@ public class StockageService {
         if(linge.getCategorie()==CategLinge.UNIFORME){
 
             notificationService.notifierUniformeStocke(linge);
-
         }
         Long service = linge.getServiceId();
         linge.setEmplacement(arsenal);

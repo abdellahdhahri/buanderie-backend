@@ -78,6 +78,9 @@
                                     .requestMatchers(
                                             "/Arsenals/**"
                                     ).permitAll()
+                                    .requestMatchers(
+                                            "/collecte-chambre/**"
+                                    ).permitAll()
 
 
                             // Tout le reste nécessite une authentification
