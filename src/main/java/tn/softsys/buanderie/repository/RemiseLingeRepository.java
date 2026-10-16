@@ -3,6 +3,7 @@ package tn.softsys.buanderie.repository;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import tn.softsys.buanderie.entity.RemiseLinge;
+import tn.softsys.buanderie.entity.enums.EtatLivraison;
 
 import java.util.List;
 
@@ -18,5 +19,10 @@ public interface RemiseLingeRepository extends JpaRepository<RemiseLinge,Long> {
     );
     List<RemiseLinge> findByCollecte_IdOrderByDateLivraisonAsc(
             Long collecteId
+    );
+
+    List<RemiseLinge> findByPersonnelIdAndEtatNotOrderByDateLivraisonDesc(
+            Long personnelId,
+            EtatLivraison etat
     );
 }

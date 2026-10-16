@@ -2,7 +2,9 @@ package tn.softsys.buanderie.service.Process;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
 import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
+import tn.softsys.buanderie.Sqlserver.dtos.PersonnelDto;
 import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
 import tn.softsys.buanderie.dto.ReclamationRequest;
 import tn.softsys.buanderie.entity.*;
@@ -23,14 +25,15 @@ public class ReclamationService {
     private final HistoriqueLingeRepository historiqueRepository;
     private final NotificationService notificationService;
     private final SqlServerPersonnelRepository sqlPersonnelRepo;
+    private final CubixPersonnelService cubixPersonnelService;
 
 
 
     @Transactional
     public Reclamation creer(ReclamationRequest request) {
 
-        Personnel agent = sqlPersonnelRepo
-                .findByCodeBarre(request.getMatriculeAgent());
+        PersonnelDto agent = cubixPersonnelService
+                .getByCode(request.getMatriculeAgent());
 //                .orElseThrow(() ->
 //                        new ResourceNotFoundException(
 //                                "Agent",

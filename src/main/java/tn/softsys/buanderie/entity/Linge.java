@@ -164,6 +164,10 @@ public class Linge {
     private Arsenal emplacement;
 
 
+    @Column(name = "arsenal_emplacement_id")
+    private Long arsenalEmplacementID;
+
+
 
 
     @Enumerated(EnumType.STRING)

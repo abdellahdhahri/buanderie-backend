@@ -31,9 +31,7 @@ public class TriService {
     private final LotRepository lotRepository;
     private final SqlServerPersonnelRepository sqlPersonnelRepo;
 
-    public List<Linge> getLingesBac(Long bacId) {
-        return lingeRepository.findByBacId(bacId);
-    }
+
     @Transactional
     public Lot affecterAuLot(AffectationLotRequest request) {
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());

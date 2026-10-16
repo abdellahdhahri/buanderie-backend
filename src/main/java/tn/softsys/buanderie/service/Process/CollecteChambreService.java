@@ -491,11 +491,6 @@ public class CollecteChambreService {
                         )
                         .sum();
 
-
-        // ========================================================
-        // CRÉER LA COLLECTE
-        // ========================================================
-
         Collecte collecte =
                 collecteRepo.save(
                         Collecte.builder()
@@ -536,10 +531,6 @@ public class CollecteChambreService {
                 );
 
 
-        // ========================================================
-        // RÉPONSE
-        // ========================================================
-
         return Map.of(
                 "collecteId",
                 collecte.getId(),
@@ -563,11 +554,6 @@ public class CollecteChambreService {
                 litsDto
         );
     }
-
-
-    // ============================================================
-    // TRAITER UN LIT
-    // ============================================================
 
     @Transactional
     public Map<String, Object> traiterLit(
@@ -612,14 +598,8 @@ public class CollecteChambreService {
             );
         }
 
-
-        // ========================================================
-        // CUBIX : LIT
-        // ========================================================
-
         CubixLitDto lit =
                 cubixLitService.getById(litId);
-
 
         if (lit == null) {
 
@@ -627,11 +607,6 @@ public class CollecteChambreService {
                     "Lit introuvable dans Cubix : " + litId
             );
         }
-
-
-        // ========================================================
-        // VÉRIFIER CHAMBRE
-        // ========================================================
 
         if (lit.getChambreId() == null
                 || !Objects.equals(
@@ -644,11 +619,6 @@ public class CollecteChambreService {
                             + "de cette collecte."
             );
         }
-
-
-        // ========================================================
-        // CUBIX : INFECTION
-        // ========================================================
 
         boolean infecte =
                 cubixLitsInfectesService
@@ -665,17 +635,7 @@ public class CollecteChambreService {
         Bac bac = null;
         SacInfecte sacInfecte = null;
 
-
-        // ========================================================
-        // CONTENANT
-        // ========================================================
-
         if (infecte) {
-
-            // ----------------------------------------------------
-            // LIT INFECTÉ → SAC INFECTÉ
-            // ----------------------------------------------------
-
             sacInfecte =
                     sacInfecteRepository
                             .findByNumeroSac(
@@ -689,11 +649,6 @@ public class CollecteChambreService {
                             );
 
         } else {
-
-            // ----------------------------------------------------
-            // LIT NORMAL → BAC BLANC
-            // ----------------------------------------------------
-
             bac =
                     bacRepo.findByCode(
                                     codeContenant
@@ -721,21 +676,11 @@ public class CollecteChambreService {
             }
         }
 
-
-        // ========================================================
-        // RÉCUPÉRER LES LINGES LIVRE DU LIT
-        // ========================================================
-
         List<Linge> linges =
                 lingeRepo.findByLitIdSqlServerInAndEtat(
                         List.of(litId),
                         EtatLinge.LIVRE
                 );
-
-
-        // ========================================================
-        // EXCLURE LES LINGES DÉJÀ TRAITÉS
-        // ========================================================
 
         linges =
                 linges
@@ -814,16 +759,10 @@ public class CollecteChambreService {
             }
         }
 
-
-        // ========================================================
-        // DÉTERMINER LE NOUVEL ÉTAT
-        // ========================================================
-
         EtatLinge nouvelEtat =
                 infecte
                         ? EtatLinge.INFECTE_COLLECTE
                         : EtatLinge.COLLECTE;
-
 
         StatutCollecteLinge statut =
                 infecte
@@ -836,7 +775,6 @@ public class CollecteChambreService {
                         ? TypeCollecte.INFECTE
                         : TypeCollecte.BLANC;
 
-
         String codeContenantFinal =
                 infecte
                         ? sacInfecte.getNumeroSac()
@@ -845,11 +783,6 @@ public class CollecteChambreService {
 
         List<String> codes =
                 new ArrayList<>();
-
-
-        // ========================================================
-        // TRAITER CHAQUE LINGE
-        // ========================================================
 
         for (Linge linge : linges) {
 
@@ -876,11 +809,6 @@ public class CollecteChambreService {
                 );
             }
 
-
-            // ----------------------------------------------------
-            // NOUVEL ÉTAT
-            // ----------------------------------------------------
-
             linge.setEtat(
                     nouvelEtat
             );
@@ -896,13 +824,6 @@ public class CollecteChambreService {
             );
 
 
-            /*
-             * IMPORTANT :
-             *
-             * Une fois le linge collecté,
-             * il n'appartient plus au lit/chambre.
-             */
-
             linge.setLitIdSqlServer(
                     null
             );
@@ -916,11 +837,6 @@ public class CollecteChambreService {
             lingeRepo.save(
                     linge
             );
-
-
-            // ----------------------------------------------------
-            // COLLECTE LINGE
-            // ----------------------------------------------------
 
             collecteLingeRepo.save(
                     CollecteLinge.builder()
@@ -949,11 +865,6 @@ public class CollecteChambreService {
 
                             .build()
             );
-
-
-            // ----------------------------------------------------
-            // HISTORIQUE
-            // ----------------------------------------------------
 
             historiqueRepo.save(
                     HistoriqueLinge.builder()
@@ -1008,12 +919,6 @@ public class CollecteChambreService {
                     linge.getCodeBarre()
             );
         }
-
-
-        // ========================================================
-        // RÉPONSE
-        // ========================================================
-
         return Map.of(
                 "litId",
                 litId,
@@ -1040,11 +945,6 @@ public class CollecteChambreService {
         );
     }
 
-
-    // ============================================================
-    // DÉCLARER PROPRE
-    // ============================================================
-
     @Transactional
     public Map<String, Object> declarerPropre(
             Long collecteId,
@@ -1052,7 +952,6 @@ public class CollecteChambreService {
 
         Collecte collecte =
                 findC(collecteId);
-
 
         if (collecte.getEtatCollecte()
                 != EtatCollecte.EN_TRAITEMENT) {
@@ -1062,10 +961,8 @@ public class CollecteChambreService {
             );
         }
 
-
         Linge linge =
                 findL(codeOuTag);
-
 
         if (!estLingeAttendu(
                 collecte,
@@ -1078,7 +975,6 @@ public class CollecteChambreService {
             );
         }
 
-
         if (done(
                 collecteId,
                 linge.getId()
@@ -1089,30 +985,13 @@ public class CollecteChambreService {
             );
         }
 
-
-        /*
-         * Le linge reste LIVRE.
-         *
-         * Seul le statut de collecte change.
-         */
-
         linge.setStatutCollecte(
                 StatutCollecteLinge.PROPRE
         );
 
-
         lingeRepo.save(
                 linge
         );
-
-
-        /*
-         * Traçabilité de l'action explicite, indépendante des
-         * compteurs blancs/infectés/manquants (typeCollecte MIXTE
-         * n'entre dans aucun de ces filtres). Sert uniquement à
-         * distinguer une collecte réellement traitée d'une collecte
-         * vide à la clôture.
-         */
 
         collecteLingeRepo.save(
                 CollecteLinge.builder()
@@ -1183,19 +1062,15 @@ public class CollecteChambreService {
                                 )
                         );
 
-
         if (!estLingeAttendu(
                 collecte,
                 linge
         )) {
-
             throw new BusinessException(
                     "Ce linge ne fait pas partie "
                             + "des linges attendus pour cette collecte."
             );
         }
-
-
         if (done(
                 collecteId,
                 lingeId
@@ -1206,10 +1081,8 @@ public class CollecteChambreService {
             );
         }
 
-
         EtatLinge ancienEtat =
                 linge.getEtat();
-
 
         linge.setStatutCollecte(
                 StatutCollecteLinge.MANQUANT
@@ -1219,7 +1092,6 @@ public class CollecteChambreService {
         lingeRepo.save(
                 linge
         );
-
 
         collecteLingeRepo.save(
                 CollecteLinge.builder()
@@ -1294,9 +1166,6 @@ public class CollecteChambreService {
         );
     }
 
-
-
-
     @Transactional
     public Map<String, Object> annulerCollecteSiVide(
             Long collecteId) {
@@ -1324,7 +1193,6 @@ public class CollecteChambreService {
 
         String codeChambre =
                 s(collecte.getCodeChambre());
-
 
         collecteRepo.delete(
                 collecte
@@ -1424,12 +1292,7 @@ public class CollecteChambreService {
                 collecte.getNbAttendus();
 
 
-        /*
-         * Les PROPRE ne sont pas enregistrés
-         * dans CollecteLinge.
-         *
-         * Ils sont donc calculés.
-         */
+
 
         long propres =
                 attendus
@@ -1495,18 +1358,7 @@ public class CollecteChambreService {
         );
 
 
-        /*
-         * IMPORTANT :
-         *
-         * Je conserve EN_TRAITEMENT ici car ton enum fourni
-         * ne permet pas de confirmer le nom de l'état final.
-         *
-         * Si tu as TERMINEE dans EtatCollecte :
-         *
-         * collecte.setEtatCollecte(
-         *      EtatCollecte.TERMINEE
-         * );
-         */
+
 
         collecte.setEtatCollecte(
                 EtatCollecte.EN_TRAITEMENT
