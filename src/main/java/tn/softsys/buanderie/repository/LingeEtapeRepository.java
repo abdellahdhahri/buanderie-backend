@@ -3,6 +3,7 @@ package tn.softsys.buanderie.repository;
 import org.springframework.data.jpa.repository.Query;
 import tn.softsys.buanderie.entity.LingeEtape;
 import org.springframework.data.jpa.repository.JpaRepository;
+import tn.softsys.buanderie.entity.enums.CodeEtape;
 import tn.softsys.buanderie.entity.enums.Zone;
 
 import java.util.List;
@@ -11,6 +12,10 @@ import java.util.Optional;
 public interface LingeEtapeRepository extends JpaRepository<LingeEtape, Long> {
 
     Optional<LingeEtape> findByCodeBarre(String codeBarre);
+
+    Optional<LingeEtape> findByCode(CodeEtape code);
+
+    boolean existsByOrdre(Integer ordre);
     List<LingeEtape> findAllByOrderByOrdreAsc();
 
     boolean existsByCodeBarre(String codeBarre);

@@ -2,10 +2,9 @@ package tn.softsys.buanderie.service.Process;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
-import tn.softsys.buanderie.Sqlserver.dtos.PersonnelDto;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
+import tn.softsys.buanderie.service.referentiel.PersonnelReferentielService;
+import tn.softsys.buanderie.repository.PersonnelRepository;
+import tn.softsys.buanderie.dto.PersonnelDto;
 import tn.softsys.buanderie.dto.ReclamationRequest;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
@@ -24,15 +23,15 @@ public class ReclamationService {
     private final ReclamationRepository reclamationRepository;
     private final HistoriqueLingeRepository historiqueRepository;
     private final NotificationService notificationService;
-    private final SqlServerPersonnelRepository sqlPersonnelRepo;
-    private final CubixPersonnelService cubixPersonnelService;
+    private final PersonnelRepository sqlPersonnelRepo;
+    private final PersonnelReferentielService personnelReferentielService;
 
 
 
     @Transactional
     public Reclamation creer(ReclamationRequest request) {
 
-        PersonnelDto agent = cubixPersonnelService
+        PersonnelDto agent = personnelReferentielService
                 .getByCode(request.getMatriculeAgent());
 //                .orElseThrow(() ->
 //                        new ResourceNotFoundException(
@@ -63,7 +62,7 @@ public class ReclamationService {
 
         Reclamation reclamation = Reclamation.builder()
                 .linge(linge)
-             //   .agent(agent)
+                //   .agent(agent)
                 .type(request.getType())
                 .dateCreation(LocalDateTime.now())
                 .status(Reclamation.StatutReclamation.EN_COURS)

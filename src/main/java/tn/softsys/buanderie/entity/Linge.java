@@ -18,6 +18,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -27,11 +28,17 @@ import lombok.ToString;
 import tn.softsys.buanderie.entity.enums.CategLinge;
 import tn.softsys.buanderie.entity.enums.EtatImmobilisation;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
+import tn.softsys.buanderie.entity.enums.SourceDonnee;
 import tn.softsys.buanderie.entity.enums.StatutCollecteLinge;
 import tn.softsys.buanderie.entity.enums.TypeCollecte;
 
 @Entity
-@Table(name = "linges")
+@Table(
+        name = "linges",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_linge_source_id_externe", columnNames = {"source", "id_externe"})
+        }
+)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -47,6 +54,15 @@ public class Linge {
 
     @Column(name = "legacy_lot_article_immobilisation_id")
     private Long legacyLotArticleImmobilisationId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private SourceDonnee source;
+
+    @Column(name = "id_externe", length = 60)
+    private String idExterne;
+
+    private LocalDateTime dateSynchro;
 
 
     @Column(length = 255)
@@ -185,6 +201,10 @@ public class Linge {
 
     @PrePersist
     public void prePersist() {
+
+        if (this.source == null) {
+            this.source = SourceDonnee.INTERNE;
+        }
 
         if (this.codeBarre == null) {
             this.codeBarre =

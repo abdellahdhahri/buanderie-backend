@@ -1,13 +1,13 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.repository.PersonnelRepository;
+import tn.softsys.buanderie.entity.Personnel;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.*;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.*;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Chambre;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Lit;
+import tn.softsys.buanderie.dto.ChambreDto;
+import tn.softsys.buanderie.dto.LitDto;
+import tn.softsys.buanderie.service.referentiel.ChambreLitReferentielService;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
 import tn.softsys.buanderie.exception.*;
@@ -24,21 +24,20 @@ public class AffectationLitService {
     private final LingeRepository            lingeRepo;
     private final AgentRepository            agentRepo;
     private final HistoriqueLingeRepository  historiqueRepo;
-    private final SqlServerChambreRepository sqlChambreRepo;
-    private final SqlServerLitRepository     sqlLitRepo;
-    private final SqlServerSejourRepository  sqlSejourRepo;
-    private SqlServerPersonnelRepository sqlPersonnelRepo;
+    private final ChambreLitReferentielService chambreLitService;
+    private final PersonnelRepository sqlPersonnelRepo;
 
     public Map<String, Object> scanChambre(String codeBarre, String matriculeAgent) {
         agentRepo.findByMatricule(matriculeAgent)
                 .orElseThrow(() -> new ResourceNotFoundException("Agent","matricule",matriculeAgent));
-        Chambre chambre = sqlChambreRepo.findByCodeBarre(codeBarre)
-                .orElseThrow(() -> new BusinessException("Chambre introuvable : " + codeBarre));
+        ChambreDto chambre = chambreLitService.getChambreByCodeBarre(codeBarre);
+        if (chambre == null) {
+            throw new BusinessException("Chambre introuvable : " + codeBarre);
+        }
 
-        Set<Long> infectes = sqlSejourRepo.findLitsInfectes()
-                .stream().map(Lit::getId).collect(Collectors.toSet());
+        Set<Long> infectes = chambreLitService.getIdsLitsInfectes();
 
-        List<Lit> lits = sqlLitRepo.findByChambreId(chambre.getId(), PageRequest.of(0,50)).getContent();
+        List<LitDto> lits = chambreLitService.getLitsByChambre(chambre.getId());
 
         List<Map<String,Object>> litsDto = lits.stream().map(lit -> {
             // Linges déjà posés sur ce lit
@@ -78,7 +77,7 @@ public class AffectationLitService {
 
     @Transactional
     public Map<String, Object> affecterLinge(Long litId, Long chambreId,
-                                              String codeOuTag, String matriculeAgent) {
+                                             String codeOuTag, String matriculeAgent) {
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
 //                .orElseThrow(() -> new ResourceNotFoundException("Agent","matricule",matriculeAgent));
 
@@ -119,7 +118,7 @@ public class AffectationLitService {
 
     /** État actuel d'une chambre — combien de linges par lit. */
     public Map<String, Object> getEtatChambre(Long chambreId) {
-        List<Lit> lits = sqlLitRepo.findByChambreId(chambreId, PageRequest.of(0,50)).getContent();
+        List<LitDto> lits = chambreLitService.getLitsByChambre(chambreId);
         List<Map<String,Object>> litsDto = lits.stream().map(lit -> {
             List<Linge> lg = lingeRepo.findByLitIdSqlServerInAndEtat(List.of(lit.getId()), EtatLinge.LIVRE);
             return Map.<String,Object>of("litId",lit.getId(),

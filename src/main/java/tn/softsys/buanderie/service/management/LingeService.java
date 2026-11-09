@@ -9,17 +9,17 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
-import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
-import tn.softsys.buanderie.dto.Linge.AssocierRfidRequest;
-import tn.softsys.buanderie.dto.Historique.HistoriqueLingeDto;
-import tn.softsys.buanderie.dto.LingeDTO;
-import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.CategLinge;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
 import tn.softsys.buanderie.entity.enums.TypeCollecte;
 import tn.softsys.buanderie.entity.enums.TypeOperation;
+import tn.softsys.buanderie.repository.PersonnelRepository;
+import tn.softsys.buanderie.entity.Personnel;
+import tn.softsys.buanderie.dto.Linge.AssocierRfidRequest;
+import tn.softsys.buanderie.dto.Historique.HistoriqueLingeDto;
+import tn.softsys.buanderie.dto.LingeDTO;
+import tn.softsys.buanderie.entity.*;
+
 import tn.softsys.buanderie.exception.BusinessException;
 import tn.softsys.buanderie.exception.ResourceNotFoundException;
 import tn.softsys.buanderie.repository.*;
@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import tn.softsys.buanderie.service.referentiel.CleReferentiel;
 
 @Service
 @RequiredArgsConstructor
@@ -43,8 +44,7 @@ public class LingeService {
     private final ServiceRepository serviceRepository;
     private final LitRepository litRepository;
     private final  LotRepository lotRepository;
-    private final CubixPersonnelService cubixPersonnelService;
-    private final SqlServerPersonnelRepository personnelRepository;
+    private final PersonnelRepository personnelRepository;
 
     public Page<LingeDTO> getLingesPaged(
             int page,
@@ -186,7 +186,7 @@ public class LingeService {
 
         Linge linge = Linge.builder()
                 .categorie(CategLinge.valueOf(dto.getCategorie()))
-                .chambreIdSqlServer(chambre.getId())
+                .chambreIdSqlServer(chambre != null ? CleReferentiel.cle(chambre) : null)
                 .poids(dto.getPoids())
                 .etat(etat)
                 .serviceId(dto.getServiceId())

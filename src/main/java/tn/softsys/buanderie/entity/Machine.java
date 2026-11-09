@@ -5,13 +5,18 @@ import lombok.*;
 import tn.softsys.buanderie.entity.enums.CategMachine;
 import tn.softsys.buanderie.entity.enums.EtatImmobilisation;
 import tn.softsys.buanderie.entity.enums.EtatTechniqueMachine;
+import tn.softsys.buanderie.entity.enums.SourceDonnee;
 import tn.softsys.buanderie.entity.enums.TypeMachine;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Entity
-@Table(name = "machines")
+@Table(
+        name = "machines",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_machine_source_id_externe", columnNames = {"source", "id_externe"})
+        }
+)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -91,6 +96,23 @@ public class Machine {
     private Integer nombreCycles;
     @Column(length = 255)
     private String designation;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private SourceDonnee source;
+
+    @Column(name = "id_externe", length = 60)
+    private String idExterne;
+
+    @Column(name = "date_synchro")
+    private LocalDateTime dateSynchro;
+
+    @PrePersist
+    public void prePersist() {
+        if (this.source == null) {
+            this.source = SourceDonnee.INTERNE;
+        }
+    }
 
     public String getDesignation() {
         return designation;

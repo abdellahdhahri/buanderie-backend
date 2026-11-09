@@ -11,6 +11,7 @@ import tn.softsys.buanderie.entity.RemiseLingeItem;
 import tn.softsys.buanderie.service.management.RemiseLingeService;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/remises-linge")
@@ -23,13 +24,15 @@ public class RemiseLingeController {
     @PostMapping
     public ResponseEntity<RemiseLinge> creerRemise(
             @RequestParam String matriculeAgentRemise,
-            @RequestParam Long id
+            @RequestParam Long id,
+            @RequestParam(required = false) Long serviceId
     ) {
 
         RemiseLinge remise =
                 remiseLingeService.creerRemise(
                         matriculeAgentRemise,
-                        id
+                        id,
+                        serviceId
                 );
 
         return ResponseEntity
@@ -60,6 +63,27 @@ public class RemiseLingeController {
         return ResponseEntity.ok(item);
     }
 
+    // Annuler la remise d'un linge scanné par erreur
+    @PostMapping("/{remiseId}/annuler-linge")
+    public ResponseEntity<RemiseLingeItem> annulerLinge(
+            @PathVariable Long remiseId,
+            @RequestParam String codeBarre
+    ) {
+        return ResponseEntity.ok(
+                remiseLingeService.annulerLinge(remiseId, codeBarre)
+        );
+    }
+
+    @GetMapping("/agent/{personnelId}/collectes-non-cloturees")
+    public ResponseEntity<Map<String, Object>> getCollectesNonCloturees(
+            @PathVariable Long personnelId
+    ) {
+        return ResponseEntity.ok(
+                remiseLingeService.getCollectesNonCloturees(personnelId)
+        );
+    }
+
+    @GetMapping("/{id}")
     public ResponseEntity<RemiseLinge> getById(
             @PathVariable Long id
     ) {

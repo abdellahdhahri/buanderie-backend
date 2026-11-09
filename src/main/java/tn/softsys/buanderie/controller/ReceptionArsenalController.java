@@ -12,9 +12,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import tn.softsys.buanderie.Sqlserver.Cubix.ArsenalCubixService;
-import tn.softsys.buanderie.Sqlserver.dtos.ArsenalDto;
-import tn.softsys.buanderie.Sqlserver.dtos.EmplacementDto;
+import tn.softsys.buanderie.service.referentiel.ArsenalReferentielService;
+import tn.softsys.buanderie.dto.ArsenalDto;
+import tn.softsys.buanderie.dto.EmplacementDto;
 import tn.softsys.buanderie.dto.ReceptionArsenalRequestDTO;
 import tn.softsys.buanderie.entity.ReceptionArsenal;
 import tn.softsys.buanderie.repository.ReceptionArsenalRepository;
@@ -26,25 +26,25 @@ import tn.softsys.buanderie.service.Process.ReceptionArsenalService;
 public class ReceptionArsenalController {
 
     private final ReceptionArsenalService receptionArsenalService;
-    private final ArsenalCubixService arsenalCubixService;
+    private final ArsenalReferentielService arsenalReferentielService;
     private final ReceptionArsenalRepository receptionArsenalRepository;
 
-    // 1. Lister les arsenaux
+    // Lister les arsenaux
     @GetMapping("/arsenaux")
     public ResponseEntity<List<ArsenalDto>> getArsenaux() {
-        return ResponseEntity.ok(arsenalCubixService.getArsenaux());
+        return ResponseEntity.ok(arsenalReferentielService.getArsenaux());
     }
 
-    // 2. Lister les emplacements d'un arsenal
+    //  Lister les emplacements d'un arsenal
     @GetMapping("/arsenaux/{arsenalID}/emplacements")
     public ResponseEntity<List<EmplacementDto>> getEmplacements(
             @PathVariable Long arsenalID) {
 
         return ResponseEntity.ok(
-                arsenalCubixService.getEmplacements(arsenalID));
+                arsenalReferentielService.getEmplacements(arsenalID));
     }
 
-    // 3. Enregistrer une réception
+    //  Enregistrer une réception
     @PostMapping
     public ResponseEntity<Map<String, Object>> enregistrerReception(
             @Valid @RequestBody ReceptionArsenalRequestDTO request) {
@@ -122,6 +122,14 @@ public class ReceptionArsenalController {
             @RequestParam(required = false) String badgeAgent) {
         return ResponseEntity.ok(receptionArsenalService.rangerLinge(
                 remiseLingeId, arsenalID, emplacement, codeLinge, badgeAgent));
+    }
+
+    // Annuler le rangement en arsenal d'un linge (il redevient « à ranger »)
+    @PostMapping("/linge/{codeLinge}/annuler-rangement")
+    public ResponseEntity<Map<String, Object>> annulerRangement(
+            @PathVariable String codeLinge,
+            @RequestParam(required = false) String badgeAgent) {
+        return ResponseEntity.ok(receptionArsenalService.annulerRangement(codeLinge, badgeAgent));
     }
 
     @GetMapping("/arsenaux/{arsenalID}/stock")

@@ -3,8 +3,8 @@ package tn.softsys.buanderie.service.management;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
+import tn.softsys.buanderie.repository.PersonnelRepository;
+import tn.softsys.buanderie.entity.Personnel;
 import tn.softsys.buanderie.entity.PersonnelLingeEtape;
 import tn.softsys.buanderie.repository.PersonnelLingeEtapeRepository;
 
@@ -15,7 +15,7 @@ import java.util.List;
 public class PersonnelLingeEtapeService {
 
     private final PersonnelLingeEtapeRepository personnelLingeEtapeRepository;
-    private final SqlServerPersonnelRepository personnelRepository;
+    private final PersonnelRepository personnelRepository;
 
 
 

@@ -1,14 +1,15 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.repository.ServiceRepository;
+import tn.softsys.buanderie.entity.ServiceEntity;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerServiceRepository;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
+import tn.softsys.buanderie.repository.PersonnelRepository;
+import tn.softsys.buanderie.entity.Personnel;
 import tn.softsys.buanderie.dto.SacsInfectes.*;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
@@ -29,14 +30,14 @@ public class CollecteServiceService {
 
     private final LingeRepository                lingeRepo;
     private final AgentRepository                agentRepo;
-    private final SqlServerServiceRepository     sqlServiceRepo;
+    private final ServiceRepository     sqlServiceRepo;
     private final BacRepository                  bacRepo;
     private final CollecteRepository             collecteRepo;
     private final CollecteLingeRepository        collecteLingeRepo;
     private final HistoriqueLingeRepository      historiqueRepo;
     private final SacInfecteRepository           sacInfecteRepo;
     private final SacInfecteService              sacInfecteService;
-    private final SqlServerPersonnelRepository personnelReo;
+    private final PersonnelRepository personnelReo;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -53,7 +54,7 @@ public class CollecteServiceService {
 //                        )
 //                );
 
-        Optional<tn.softsys.buanderie.Sqlserver.sqlServerEntities.Service> svc = resolveService(serviceId, refOuCode);
+        Optional<ServiceEntity> svc = resolveService(serviceId, refOuCode);
 
         List<Linge> attendus = lingeRepo.findByServiceIdAndEtat(
                 svc.get().getId(),
@@ -214,7 +215,7 @@ public class CollecteServiceService {
 
         historiqueRepo.save(HistoriqueLinge.builder()
                 .linge(l).etatAvant(ancien).etatApres(EtatLinge.COLLECTE)
-               // .agent(c.getAgent())
+                // .agent(c.getAgent())
                 .typeOperation(TypeOperation.COLLECTE)
                 .dateOperation(LocalDateTime.now()).collecte(c)
                 .observations("BLANC bac=" + bac.getCode()
@@ -638,7 +639,7 @@ public class CollecteServiceService {
                 .substring(0, 6)
                 .toUpperCase();
     }
-    private Optional<tn.softsys.buanderie.Sqlserver.sqlServerEntities.Service> resolveService(Long serviceId, String refOuCode) {
+    private Optional<ServiceEntity> resolveService(Long serviceId, String refOuCode) {
 
         if (serviceId != null) {
             return sqlServiceRepo.findById(serviceId);

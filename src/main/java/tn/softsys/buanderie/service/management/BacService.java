@@ -7,7 +7,6 @@ import org.springframework.transaction.annotation.Transactional;
 import tn.softsys.buanderie.dto.BacDTO;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.EtatBac;
-import tn.softsys.buanderie.entity.enums.EtatLinge;
 import tn.softsys.buanderie.entity.enums.TypeOperation;
 import tn.softsys.buanderie.exception.BusinessException;
 import tn.softsys.buanderie.exception.ResourceNotFoundException;

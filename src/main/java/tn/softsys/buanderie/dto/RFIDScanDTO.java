@@ -1,7 +1,6 @@
 package tn.softsys.buanderie.dto;
 
 import lombok.Data;
-import tn.softsys.buanderie.entity.enums.TypeBac;
 
 import java.util.List;
 

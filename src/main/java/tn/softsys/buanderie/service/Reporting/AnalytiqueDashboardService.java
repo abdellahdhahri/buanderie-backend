@@ -1,14 +1,16 @@
 package tn.softsys.buanderie.service.Reporting;
 
+import tn.softsys.buanderie.repository.ServiceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerServiceRepository;
 import tn.softsys.buanderie.entity.HistoriqueLinge;
 import tn.softsys.buanderie.entity.Linge;
 import tn.softsys.buanderie.entity.enums.*;
 import tn.softsys.buanderie.repository.*;
+import tn.softsys.buanderie.service.management.OperationsEtape;
+import tn.softsys.buanderie.service.management.ParcoursService;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -28,8 +30,9 @@ public class AnalytiqueDashboardService {
     private final CycleSechageRepository     cycleSechageRepo;
     private final SacInfecteRepository       sacInfecteRepo;
     private final HistoriqueLingeRepository  historiqueRepo;
-    private final SqlServerServiceRepository sqlServiceRepo;
+    private final ServiceRepository sqlServiceRepo;
     private final NotificationService notificationService;
+    private final ParcoursService parcoursService;
 
     private static final int    SEUIL_CRITIQUE  = 3;
     private static final int    SEUIL_ATTENTION = 8;
@@ -48,6 +51,7 @@ public class AnalytiqueDashboardService {
         result.put("distributionEtats", buildDistribution(linges));
         result.put("stockParService",   buildStockParService(linges));
         result.put("alertes",           buildAlertes(linges));
+        result.put("parcours",          buildParcours(linges));
         result.put("machines",          buildMachines(machines, debut));
         result.put("activiteAgents",    buildAgents(debut));
         return result;
@@ -68,14 +72,13 @@ public class AnalytiqueDashboardService {
         long actifs  = linges.stream()
                 .filter(l -> l.getEtat() != EtatLinge.HORS_SERVICE).count();
 
-        Set<EtatLinge> enCircuit = Set.of(
-                EtatLinge.COLLECTE, EtatLinge.RECEPTION, EtatLinge.EN_TRI,
-                EtatLinge.EN_LAVAGE, EtatLinge.LAVE,
-                EtatLinge.EN_SECHAGE, EtatLinge.SECHE, EtatLinge.PLIE);
+        Set<EtatLinge> enCircuit = etatsEnCircuit();
+
+        Set<EtatLinge> etatsDisponibles = etatsDisponibles();
 
         long circuit     = linges.stream().filter(l -> enCircuit.contains(l.getEtat())).count();
         long disponibles = linges.stream()
-                .filter(l -> l.getEtat() == EtatLinge.LIVRE || l.getEtat() == EtatLinge.STOCKE)
+                .filter(l -> l.getEtat() == EtatLinge.LIVRE || etatsDisponibles.contains(l.getEtat()))
                 .count();
 
         long collectesJ = collecteRepo.findAll().stream()
@@ -162,16 +165,15 @@ public class AnalytiqueDashboardService {
                 .collect(Collectors.groupingBy(
                         tn.softsys.buanderie.entity.Linge::getServiceId));
 
-        Set<EtatLinge> circuit = Set.of(
-                EtatLinge.COLLECTE, EtatLinge.RECEPTION, EtatLinge.EN_TRI,
-                EtatLinge.EN_LAVAGE, EtatLinge.LAVE,
-                EtatLinge.EN_SECHAGE, EtatLinge.SECHE, EtatLinge.PLIE);
+        Set<EtatLinge> circuit = etatsEnCircuit();
+
+        Set<EtatLinge> etatsDisponibles = etatsDisponibles();
 
         return sqlServiceRepo.findAll().stream().map(svc -> {
                     var ls = parService.getOrDefault(svc.getId(), List.of());
 
                     long nbLivre   = ls.stream().filter(l -> l.getEtat() == EtatLinge.LIVRE).count();
-                    long nbStocke  = ls.stream().filter(l -> l.getEtat() == EtatLinge.STOCKE).count();
+                    long nbStocke  = ls.stream().filter(l -> etatsDisponibles.contains(l.getEtat())).count();
                     long nbCircuit = ls.stream().filter(l -> circuit.contains(l.getEtat())).count();
                     long nbTotal   = ls.size();
 
@@ -488,19 +490,76 @@ public class AnalytiqueDashboardService {
         return Math.round(v * 10.0) / 10.0;
     }
 
-    private String inferEtape(String typeOp) {
-        return switch (typeOp) {
-            case "COLLECTE"           -> "Collecte";
-            case "RECEPTION_BAC"      -> "Réception";
-            case "TRI"                -> "Tri";
-            case "DEMARRAGE_LAVAGE",
-                 "FIN_LAVAGE"         -> "Lavage";
-            case "DEMARRAGE_SECHAGE",
-                 "FIN_SECHAGE"        -> "Séchage";
-            case "PLIAGE"             -> "Pliage";
-            case "MISE_EN_STOCKAGE"   -> "Stockage";
-            case "LIVRAISON"          -> "Distribution";
-            default                   -> typeOp;
+    private Set<EtatLinge> etatsDisponibles() {
+        Set<EtatLinge> etats = parcoursService.etatsAcceptes(CodeEtape.DISTRIBUTION);
+        return etats.isEmpty() ? Set.of(EtatLinge.STOCKE) : etats;
+    }
+
+    private Set<EtatLinge> etatsEnCircuit() {
+        Set<EtatLinge> circuit = new LinkedHashSet<>(List.of(
+                EtatLinge.COLLECTE, EtatLinge.RECEPTION, EtatLinge.EN_TRI,
+                EtatLinge.EN_LAVAGE, EtatLinge.LAVE,
+                EtatLinge.EN_SECHAGE, EtatLinge.SECHE, EtatLinge.PLIE));
+        circuit.removeAll(etatsDisponibles());
+        return circuit;
+    }
+
+    private Set<EtatLinge> etatsDeLEtape(CodeEtape etape) {
+        return switch (etape) {
+            case COLLECTE -> Set.of(EtatLinge.COLLECTE);
+            case RECEPTION -> Set.of(EtatLinge.RECEPTION);
+            case TRI -> Set.of(EtatLinge.EN_TRI);
+            case LAVAGE -> Set.of(EtatLinge.EN_LAVAGE, EtatLinge.LAVE);
+            case SECHAGE -> Set.of(EtatLinge.EN_SECHAGE, EtatLinge.SECHE);
+            case PLIAGE -> Set.of(EtatLinge.PLIE);
+            case STOCKAGE -> Set.of(EtatLinge.STOCKE);
+            case DISTRIBUTION -> Set.of(EtatLinge.LIVRE);
         };
+    }
+
+    private List<Map<String, Object>> buildParcours(List<Linge> linges) {
+        Map<EtatLinge, Long> parEtat = linges.stream()
+                .filter(l -> l.getEtat() != null)
+                .collect(Collectors.groupingBy(Linge::getEtat, Collectors.counting()));
+
+        List<Map<String, Object>> resultat = new ArrayList<>();
+        long reporte = 0;
+
+        for (ParcoursService.EtapeResume etape : parcoursService.etapes()) {
+            long propres = 0;
+            for (EtatLinge etat : etatsDeLEtape(etape.code())) {
+                propres += parEtat.getOrDefault(etat, 0L);
+            }
+
+            if (!etape.actif()) {
+                reporte += propres;
+                continue;
+            }
+
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("code",     etape.code().name());
+            m.put("nom",      etape.nom());
+            m.put("ordre",    etape.ordre());
+            m.put("nbLinges", propres + reporte);
+            if (reporte > 0) {
+                m.put("dontEtapesDesactivees", reporte);
+            }
+            reporte = 0;
+            resultat.add(m);
+        }
+        return resultat;
+    }
+
+    private String inferEtape(String typeOp) {
+        if (typeOp == null || typeOp.isBlank()) {
+            return "";
+        }
+        try {
+            TypeOperation operation = TypeOperation.valueOf(typeOp);
+            CodeEtape etape = OperationsEtape.etape(operation);
+            return etape != null ? parcoursService.nomEtape(etape) : OperationsEtape.libelle(operation);
+        } catch (IllegalArgumentException e) {
+            return typeOp;
+        }
     }
 }

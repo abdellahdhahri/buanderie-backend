@@ -1,12 +1,12 @@
 package tn.softsys.buanderie.service.management;
 
+import tn.softsys.buanderie.repository.ServiceRepository;
+import tn.softsys.buanderie.entity.ServiceEntity;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerServiceRepository;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
-import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
+import tn.softsys.buanderie.repository.PersonnelRepository;
+import tn.softsys.buanderie.entity.Personnel;
 import tn.softsys.buanderie.dto.SacsInfectes.AffectationLingesPropresRequest;
 import tn.softsys.buanderie.dto.SacsInfectes.SacInfecteDTO;
 import tn.softsys.buanderie.dto.SacsInfectes.SacInfecteItemRequest;
@@ -35,7 +35,7 @@ public class SacInfecteService {
     private final SacInfecteRepository sacInfecteRepository;
     private final SacInfecteItemRepository sacInfecteItemRepository;
     private final AgentRepository agentRepository;
-    private final SqlServerServiceRepository serviceRepository;
+    private final ServiceRepository serviceRepository;
     private final LingeRepository lingeRepository;
     private final HistoriqueLingeRepository historiqueLingeRepository;
     private final CollecteLingeRepository collecteLingeRepository;
@@ -44,11 +44,10 @@ public class SacInfecteService {
     private final CycleLavageRepository  cycleLavageRepository;
     private final CycleLavageItemRepository cycleLavageItemRepository;
     private final CycleLavageService cycleLavageService;
-    private final SqlServerPersonnelRepository personnelRepository;
+    private final PersonnelRepository personnelRepository;
 
-    private final SqlServerPersonnelRepository sqlPersonnelRepo;
+    private final PersonnelRepository sqlPersonnelRepo;
 
-    private final CubixPersonnelService cubixPersonnelService;
 
 
     public SacInfecte creerSac(SacInfecteDTO sacInfecteDTO){
@@ -56,14 +55,14 @@ public class SacInfecteService {
             throw new BusinessException("sac avec ce numero deja existe '"+ sacInfecteDTO.getNumeroSac());
         }*/
         SacInfecte sac = SacInfecte.builder ()
-        //.agentCollecte(sacInfecteDTO.getA())
-        //.agentLavage(sacInfecteDTO.getAgentLavageNom())
-        .dateReception(sacInfecteDTO.getDateReception())
-        .chambre(sacInfecteDTO.getChambre())
-        .etat(EtatSac.DECLARE)
-        .observations("sac crée ")
-        .quantiteDeclaree(0)
-        .build();
+                //.agentCollecte(sacInfecteDTO.getA())
+                //.agentLavage(sacInfecteDTO.getAgentLavageNom())
+                .dateReception(sacInfecteDTO.getDateReception())
+                .chambre(sacInfecteDTO.getChambre())
+                .etat(EtatSac.DECLARE)
+                .observations("sac crée ")
+                .quantiteDeclaree(0)
+                .build();
 
         return  sacInfecteRepository.save(sac);
 
@@ -78,8 +77,8 @@ public class SacInfecteService {
             throw new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent());
         }
 
-        Optional<tn.softsys.buanderie.Sqlserver.sqlServerEntities.Service> service = serviceRepository.findById(request.getServiceId());
-               // .orElseThrow(() -> new BusinessException("Service introuvable : " + request.getServiceId()));
+        Optional<ServiceEntity> service = serviceRepository.findById(request.getServiceId());
+        // .orElseThrow(() -> new BusinessException("Service introuvable : " + request.getServiceId()));
 
         int totalDeclare = request.getItems().stream()
                 .mapToInt(SacInfecteItemRequest::getQuantiteDeclaree).sum();
@@ -87,7 +86,7 @@ public class SacInfecteService {
             throw new BusinessException("La quantité totale déclarée doit être > 0.");
         SacInfecte sac = SacInfecte.builder()
                 .collecte(collecte)
-               // .agentCollecte(agent)
+                // .agentCollecte(agent)
                 .personnelId(agent.getId())
                 .serviceId(service.get().getId())
                 .chambre(request.getChambre())
@@ -129,7 +128,7 @@ public class SacInfecteService {
 
         sac.setEtat(EtatSac.RECEPTIONNE);
         sac.setDateReception(LocalDateTime.now());
-       // sac.setAgentReception(agent);
+        // sac.setAgentReception(agent);
         sacInfecteRepository.save(sac);
         return toDTO(sac);
     }
@@ -205,12 +204,38 @@ public class SacInfecteService {
         sac.setQuantiteCompteePostLavage(totalCompte);
         sac.setEcart(ecartGlobal);
         sac.setDateVerification(LocalDateTime.now());
-     //   sac.setAgentLavage(agent);
+        //   sac.setAgentLavage(agent);
         sac.setPersonnelId(agent.getId());
         sac.setObservations((sac.getObservations() != null ? sac.getObservations() + " | " : "")
                 + (request.getObservations() != null ? request.getObservations() : ""));
         sac.setEtat(ecartGlobal == 0 ? EtatSac.VERIFIE : EtatSac.ECART_DETECTE);
         sacInfecteRepository.save(sac);
+        for (Linge linge : sac.getLinges()) {
+
+            EtatLinge avant = linge.getEtat();
+
+            linge.setEtat(EtatLinge.INFECTE_LAVE);
+            lingeRepository.save(linge);
+
+            historiqueLingeRepository.save(
+                    HistoriqueLinge.builder()
+                            .linge(linge)
+                            .etatAvant(avant)
+                            .etatApres(EtatLinge.INFECTE_LAVE)
+                            .personnelId(agent.getId())
+                            .typeOperation(sac.getEtat() == EtatSac.VERIFIE
+                                    ? TypeOperation.VERIFICATION_SAC_INFECTE_OK
+                                    : TypeOperation.VERIFICATION_SAC_INFECTE_ECART)
+                            .dateOperation(LocalDateTime.now())
+                            .sacInfecte(sac)
+                            .collecte(sac.getCollecte())
+                            .observations("Lavage terminé — sac " + sac.getNumeroSac()
+                                    + (sac.getEtat() == EtatSac.VERIFIE
+                                    ? " — quantité conforme"
+                                    : " — écart " + sac.getEcart()))
+                            .build()
+            );
+        }
         if (sac.getCycleLavage() != null) {
             CycleLavage cycle = sac.getCycleLavage();
             cycle.setStatut(StatutCycle.TERMINE);
@@ -311,7 +336,7 @@ public class SacInfecteService {
 
         sac.setEtat(EtatSac.LINGES_AFFECTES);
         sac.setDateAffectationPropres(LocalDateTime.now());
-       // sac.setAgentAffectation(agent);
+        // sac.setAgentAffectation(agent);
         sac.setPersonnelId(agent.getId());
         sacInfecteRepository.save(sac);
         return toDTO(sac);
@@ -370,9 +395,9 @@ public class SacInfecteService {
                 .numeroSac(sac.getNumeroSac())
                 .etat(sac.getEtat())
                 .collecteId(sac.getCollecte() != null ? sac.getCollecte().getId() : null)
-               // .agentCollecteNom(sac.getAgentCollecte() != null ? sac.getAgentCollecte().getNom() : null)
-               // .agentCollecteMatricule(sac.getAgentCollecte() != null ? sac.getAgentCollecte().getMatricule() : null)
-               // .serviceNom(sac.getService() != null ? sac.getService().getNom() : null)
+                // .agentCollecteNom(sac.getAgentCollecte() != null ? sac.getAgentCollecte().getNom() : null)
+                // .agentCollecteMatricule(sac.getAgentCollecte() != null ? sac.getAgentCollecte().getMatricule() : null)
+                // .serviceNom(sac.getService() != null ? sac.getService().getNom() : null)
 
                 .chambre(sac.getChambre())
                 .quantiteDeclaree(sac.getQuantiteDeclaree())

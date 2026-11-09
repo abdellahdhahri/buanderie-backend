@@ -1,18 +1,22 @@
 package tn.softsys.buanderie.service.Process;
 
 
+import tn.softsys.buanderie.repository.ServiceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerServiceRepository;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
+import tn.softsys.buanderie.repository.PersonnelRepository;
+import tn.softsys.buanderie.entity.Personnel;
 import tn.softsys.buanderie.dto.StockageRequest;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.CategLinge;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
 import tn.softsys.buanderie.entity.enums.TypeOperation;
 import tn.softsys.buanderie.exception.BusinessException;
+import tn.softsys.buanderie.entity.enums.CodeEtape;
+import tn.softsys.buanderie.service.management.ParcoursService;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import tn.softsys.buanderie.exception.ResourceNotFoundException;
 import tn.softsys.buanderie.repository.*;
 import tn.softsys.buanderie.service.Reporting.NotificationService;
@@ -26,17 +30,20 @@ import java.util.Optional;
 public class StockageService {
     private final LingeRepository lingeRepository;
     private final HistoriqueLingeRepository historiqueLingeRepository;
-    private final SqlServerServiceRepository serviceRepository;
+    private final ServiceRepository serviceRepository;
     private final AgentRepository agentRepository;
     private final ArsenalRepository arsenalRepository;
     private final NotificationService notificationService;
-    private final SqlServerPersonnelRepository sqlPersonnelRepo;
+    private final PersonnelRepository sqlPersonnelRepo;
+    private final ParcoursService parcoursService;
 
 
 
 
     @Transactional
     public Linge Stocker(StockageRequest request) {
+        parcoursService.exigerActive(CodeEtape.STOCKAGE);
+
 
         //recuperer l'agent
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
@@ -48,9 +55,15 @@ public class StockageService {
         //recuperer linge
         Linge linge = rechercherLinge(request.getCodeOuTag());
         Arsenal  arsenal = getLingeEmplacement(linge.getCodeBarre());
-        if (linge.getEtat() != EtatLinge.PLIE) {
+        Set<EtatLinge> etatsAcceptes = new LinkedHashSet<>(parcoursService.etatsAcceptes(CodeEtape.STOCKAGE));
+        if (etatsAcceptes.isEmpty()) {
+            etatsAcceptes.add(EtatLinge.PLIE);
+        }
+        if (!etatsAcceptes.contains(linge.getEtat())) {
             throw new BusinessException(
-                    "Le linge doit être en état SECHE.");
+                    "Le linge doit être dans l'un des états suivants : "
+                            + String.join(", ", etatsAcceptes.stream().map(Enum::name).toList())
+                            + " (état actuel : " + linge.getEtat() + ").");
         }
 
         EtatLinge ancienEtat = linge.getEtat();

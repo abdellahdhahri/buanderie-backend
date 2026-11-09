@@ -3,19 +3,22 @@ package tn.softsys.buanderie.service.Process;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
+import tn.softsys.buanderie.repository.PersonnelRepository;
+import tn.softsys.buanderie.entity.Personnel;
 import tn.softsys.buanderie.dto.Lot.LotScanResponse;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
 import tn.softsys.buanderie.exception.BusinessException;
+import tn.softsys.buanderie.entity.enums.CodeEtape;
+import tn.softsys.buanderie.service.management.ParcoursService;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import tn.softsys.buanderie.exception.ResourceNotFoundException;
 import tn.softsys.buanderie.repository.*;
 import tn.softsys.buanderie.service.Reporting.NotificationService;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 
 @Service
@@ -32,10 +35,13 @@ public class CycleSechageService {
     private final LingeRepository            lingeRepository;
     private final HistoriqueLingeRepository  historiqueLingeRepository;
     private final NotificationService        notificationService;
-    private final SqlServerPersonnelRepository sqlPersonnelRepo;
+    private final PersonnelRepository sqlPersonnelRepo;
+    private final ParcoursService parcoursService;
 
 
     public LotScanResponse scanLot(String codeLot) {
+        parcoursService.exigerActive(CodeEtape.SECHAGE);
+
 
         Lot lot = lotRepo.findByCodeLot(codeLot)
                 .orElseThrow(() -> new ResourceNotFoundException("Lot", "code", codeLot));
@@ -49,7 +55,7 @@ public class CycleSechageService {
                 .temperature(programme.getTemperatureCelsius())
                 .description(programme.getDescription() != null
                         ? programme.getDescription()
-                        + " | Humidité cible : " + programme.getNiveauHumidite() + "%"
+                          + " | Humidité cible : " + programme.getNiveauHumidite() + "%"
                         : "Humidité cible : " + programme.getNiveauHumidite() + "%")
                 .duree(programme.getDureeMinutes())
                 .build();
@@ -58,9 +64,11 @@ public class CycleSechageService {
 
     @Transactional
     public CycleSechage startCycle(String codeMachine,
-                                    String codeLot,
-                                    String matriculeAgent,
-                                    Double poidsCharge) {
+                                   String codeLot,
+                                   String matriculeAgent,
+                                   Double poidsCharge) {
+        parcoursService.exigerActive(CodeEtape.SECHAGE);
+
 
 
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
@@ -79,7 +87,7 @@ public class CycleSechageService {
                 && machine.getType() != TypeMachine.LAVEUR_SECHEUR)
             throw new BusinessException(
                     "La machine [" + codeMachine + "] n'est pas un séchoir. "
-                    + "Type actuel : " + machine.getType());
+                            + "Type actuel : " + machine.getType());
 
         if (machine.getEtatImmobilisation() != EtatImmobilisation.DISPONIBLE)
             throw new BusinessException(
@@ -93,20 +101,23 @@ public class CycleSechageService {
         if (linges.isEmpty())
             throw new BusinessException("Lot vide : " + codeLot);
 
-        boolean tousLaves = linges.stream()
-                .allMatch(l -> l.getEtat() == EtatLinge.LAVE
-                            || l.getEtat() == EtatLinge.SECHE); // SECHE si re-séchage
-        if (!tousLaves)
+        Set<EtatLinge> etatsAcceptes = new LinkedHashSet<>(parcoursService.etatsAcceptes(CodeEtape.SECHAGE));
+        if (etatsAcceptes.isEmpty()) {
+            etatsAcceptes.add(EtatLinge.LAVE);
+        }
+        etatsAcceptes.add(EtatLinge.SECHE); // re-séchage
+        boolean tousPrets = linges.stream().allMatch(l -> etatsAcceptes.contains(l.getEtat()));
+        if (!tousPrets)
             throw new BusinessException(
-                    "Certains linges ne sont pas encore lavés. "
-                    + "Le séchage nécessite l'état LAVE.");
+                    "Certains linges ne sont pas prêts pour le séchage. États acceptés : "
+                            + String.join(", ", etatsAcceptes.stream().map(Enum::name).toList()) + ".");
 
         // Vérifier capacité
-        if (poidsCharge > machine.getCapaciteKg())
-            throw new BusinessException(
-                    "Capacité machine insuffisante : "
-                    + machine.getCapaciteKg() + " kg max, "
-                    + poidsCharge + " kg demandés.");
+//        if (poidsCharge > machine.getCapaciteKg())
+//            throw new BusinessException(
+//                    "Capacité machine insuffisante : "
+//                    + machine.getCapaciteKg() + " kg max, "
+//                    + poidsCharge + " kg demandés.");
 
         ProgrammeSechage programme = suggestProgramme(lot.getCategorie());
 
@@ -156,8 +167,10 @@ public class CycleSechageService {
     //    (plusieurs lots dans la même sécheuse)
     @Transactional
     public CycleSechage addLotToCycle(Long cycleId,
-                                       String codeLot,
-                                       Double poidsCharge) {
+                                      String codeLot,
+                                      Double poidsCharge) {
+        parcoursService.exigerActive(CodeEtape.SECHAGE);
+
 
         CycleSechage cycle = cycleRepo.findById(cycleId)
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -183,7 +196,7 @@ public class CycleSechageService {
             linge.setEtat(EtatLinge.EN_SECHAGE);
             historiqueLingeRepository.save(HistoriqueLinge.builder()
                     .linge(linge).etatAvant(ancien).etatApres(EtatLinge.EN_SECHAGE)
-                    //.agent(cycle.getAgent())
+                    .personnelId(cycle.getPersonnelId())
                     .typeOperation(TypeOperation.DEMARRAGE_SECHAGE)
                     .dateOperation(LocalDateTime.now())
                     .observations("Ajout lot au cycle " + cycle.getNumeroCycle())
@@ -241,7 +254,7 @@ public class CycleSechageService {
                         .linge(linge)
                         .etatAvant(ancien)
                         .etatApres(EtatLinge.SECHE)
-                        //.agent(cycle.getAgent())
+                        .personnelId(cycle.getPersonnelId())
                         .typeOperation(TypeOperation.FIN_SECHAGE)
                         .dateOperation(LocalDateTime.now())
                         .observations("Fin séchage — cycle " + cycle.getNumeroCycle()

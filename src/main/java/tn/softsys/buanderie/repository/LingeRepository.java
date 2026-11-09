@@ -2,14 +2,16 @@ package tn.softsys.buanderie.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import tn.softsys.buanderie.entity.Linge;
 import tn.softsys.buanderie.entity.enums.CategLinge;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
+import tn.softsys.buanderie.entity.enums.SourceDonnee;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -55,6 +57,24 @@ public interface LingeRepository extends JpaRepository<Linge, Long>, JpaSpecific
             EtatLinge etat
     );
     long countByEtat(EtatLinge etat);
+
+    List<Linge> findBySource(SourceDonnee source);
+
+    List<Linge> findBySourceAndIdExterneIn(SourceDonnee source, Collection<String> idsExternes);
+
+    List<Linge> findByCodeBarreIn(Collection<String> codesBarres);
+
+    @Query("SELECT l.idExterne FROM Linge l WHERE l.source = :source AND l.idExterne IS NOT NULL")
+    List<String> findIdsExternes(@Param("source") SourceDonnee source);
+
+    @Modifying
+    @Query("UPDATE Linge l SET l.source = :source, l.idExterne = CAST(l.legacyLotArticleImmobilisationId AS String) "
+            + "WHERE l.source IS NULL AND l.legacyLotArticleImmobilisationId IS NOT NULL")
+    int migrerLingesImportes(@Param("source") SourceDonnee source);
+
+    @Modifying
+    @Query("UPDATE Linge l SET l.source = :source WHERE l.source IS NULL")
+    int definirSourceManquante(@Param("source") SourceDonnee source);
 
     long countByCategorieAndEtat(
             CategLinge categorie,

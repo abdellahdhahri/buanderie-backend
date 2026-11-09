@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import jakarta.persistence.*;
 import lombok.*;
 import tn.softsys.buanderie.entity.enums.CategLinge;
+import tn.softsys.buanderie.entity.enums.EtatLinge;
 
 @Entity
 @Table(
@@ -30,6 +31,10 @@ public class RemiseLingeLinge {
     @JoinColumn(name = "linge_id", nullable = false)
     private Linge linge;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "collecte_id")
+    private Collecte collecte;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private CategLinge categorie;
@@ -38,6 +43,15 @@ public class RemiseLingeLinge {
     private LocalDateTime dateScan;
 
     private LocalDateTime dateRangement;
+
+    // État et étagère buanderie du linge AVANT la remise : permettent
+    // d'annuler la remise d'un linge en le remettant exactement comme avant.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "etat_avant", length = 30)
+    private EtatLinge etatAvant;
+
+    @Column(name = "arsenal_emplacement_id_avant")
+    private Long arsenalEmplacementIdAvant;
 
     @PrePersist
     protected void onCreate() {

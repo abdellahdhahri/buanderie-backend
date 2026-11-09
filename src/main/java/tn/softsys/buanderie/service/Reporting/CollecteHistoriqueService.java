@@ -1,9 +1,9 @@
 package tn.softsys.buanderie.service.Reporting;
 
+import tn.softsys.buanderie.repository.ServiceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerServiceRepository;
 import tn.softsys.buanderie.dto.CollecteHistoriqueDTO;
 import tn.softsys.buanderie.dto.CollecteListeDTO;
 import tn.softsys.buanderie.entity.Collecte;
@@ -25,7 +25,7 @@ public class CollecteHistoriqueService {
     private final CollecteRepository          collecteRepo;
     private final CollecteLingeRepository     collecteLingeRepo;
     private final SacInfecteRepository        sacInfecteRepo;
-    private final SqlServerServiceRepository  sqlServiceRepo;
+    private final ServiceRepository  sqlServiceRepo;
 
     public List<CollecteListeDTO> getAllCollectes() {
         return collecteRepo.findAll().stream()
@@ -123,9 +123,9 @@ public class CollecteHistoriqueService {
                 .numeroCollecte(c.getNumeroCollecte())
                 .typeCollecte(c.getTypeCollecte() != null ? c.getTypeCollecte().name() : null)
                 .etatCollecte(c.getEtatCollecte() != null ? c.getEtatCollecte().name() : null)
-            //    .agentMatricule(c.getAgent() != null ? c.getAgent().getMatricule() : null)
-             //   .agentNom(c.getAgent() != null
-                     //   ? c.getAgent().getNom() + " " + c.getAgent().getPrenom() : null)
+                //    .agentMatricule(c.getAgent() != null ? c.getAgent().getMatricule() : null)
+                //   .agentNom(c.getAgent() != null
+                //   ? c.getAgent().getNom() + " " + c.getAgent().getPrenom() : null)
                 .serviceId(c.getService())
                 .serviceCode(serviceCode)
                 .chambreIdSqlServer(c.getChambreIdSqlServer())
@@ -159,9 +159,9 @@ public class CollecteHistoriqueService {
                 .numeroCollecte(c.getNumeroCollecte())
                 .typeCollecte(c.getTypeCollecte() != null ? c.getTypeCollecte().name() : null)
                 .etatCollecte(c.getEtatCollecte() != null ? c.getEtatCollecte().name() : null)
-               // .agentMatricule(c.getAgent() != null ? c.getAgent().getMatricule() : null)
+                // .agentMatricule(c.getAgent() != null ? c.getAgent().getMatricule() : null)
                 //.agentNom(c.getAgent() != null
-                  //      ? c.getAgent().getNom() + " " + c.getAgent().getPrenom() : null)
+                //      ? c.getAgent().getNom() + " " + c.getAgent().getPrenom() : null)
                 .serviceId(c.getService())
                 .serviceCode(serviceCode)
                 .codeChambre(c.getCodeChambre())
