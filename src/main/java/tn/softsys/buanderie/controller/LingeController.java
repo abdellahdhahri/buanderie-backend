@@ -1,4 +1,5 @@
 package tn.softsys.buanderie.controller;
+import java.util.Arrays;
 import java.util.List;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -8,23 +9,20 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.LingeImportRepository;
-import tn.softsys.buanderie.Sqlserver.dtos.LingeImportableProjectionDto;
-import tn.softsys.buanderie.Sqlserver.projection.LingeImportableProjection;
-import tn.softsys.buanderie.Sqlserver.sqlServerServices.CubixImportClient;
-import tn.softsys.buanderie.Sqlserver.sqlServerServices.LingeImportService;
 import tn.softsys.buanderie.dto.Linge.AssocierRfidRequest;
 import tn.softsys.buanderie.dto.Historique.HistoriqueLingeDto;
-import tn.softsys.buanderie.dto.Linge.LingeImportRequest;
 import tn.softsys.buanderie.dto.LingeDTO;
 import tn.softsys.buanderie.entity.HistoriqueLinge;
+import tn.softsys.buanderie.entity.enums.CategLinge;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
+import tn.softsys.buanderie.entity.enums.Referentiel;
+import tn.softsys.buanderie.exception.BusinessException;
+import tn.softsys.buanderie.service.referentiel.IntegrationService;
 import tn.softsys.buanderie.entity.Linge;
 import tn.softsys.buanderie.service.Process.CollecteServiceService;
 import tn.softsys.buanderie.service.management.LingeService;
@@ -32,9 +30,7 @@ import tn.softsys.buanderie.service.management.LingeService;
 public class LingeController {
     private final LingeService lingeService;
     private final CollecteServiceService collecteService;
-    private final LingeImportRepository lingeImportRepository;
-    private final LingeImportService lingeImportService;
-    private final CubixImportClient cubixImportClient;
+    private final IntegrationService integrationService;
 
 
     // @PreAuthorize("hasAuthority('LIG1305')")
@@ -49,6 +45,11 @@ public class LingeController {
             @RequestParam(required = false) String search) {
         return lingeService.getLingesPaged(page, size, categorie, etat, serviceId, search);
     }
+    @GetMapping("/categories")
+    public List<String> categories() {
+        return Arrays.stream(CategLinge.values()).map(Enum::name).toList();
+    }
+
     @GetMapping public List<Linge> liste() { return lingeService.findAll(); }
     @Operation(summary = "Récupérer l historique global")
 
@@ -70,7 +71,14 @@ public class LingeController {
     @GetMapping("/rfid/{rfid}") public Linge getByrfid(@PathVariable String rfid) { return lingeService.getByRfidTag(rfid); }
     @GetMapping("/bac/{bacId}") public List<Linge> getByBac(@PathVariable Long bacId) { return lingeService.findByBac(bacId); }
     @GetMapping("/barcode/{code}") public Linge getByBarcode(@PathVariable String code) { return lingeService.findByCodeBarre(code); }
-    @PostMapping @ResponseStatus(HttpStatus.CREATED) public Linge creer(@Valid @RequestBody LingeDTO linge) { return lingeService.creer(linge); }
+    @PostMapping @ResponseStatus(HttpStatus.CREATED)
+    public Linge creer(@Valid @RequestBody LingeDTO linge) {
+        if (integrationService.estImporte(Referentiel.LINGE)) {
+            throw new BusinessException(
+                    "Les linges sont importés depuis le système externe : ajoutez-les dans le système source.");
+        }
+        return lingeService.creer(linge);
+    }
     @PatchMapping("/{id}/etat")
     public Linge changerEtat(@PathVariable Long id, @RequestBody ChangerEtatRequest req) {
         return lingeService.changerEtat(id, req.getEtat(), req.getMatriculeAgent(), req.getObservations());
@@ -130,44 +138,6 @@ public class LingeController {
                 lingeService.associerTagRfid(request));
     }
 
-
-    @GetMapping("/a-importer")
-    public Page<LingeImportableProjectionDto> getLingesAImporter(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
-
-        return lingeImportService.getLingesAImporter(page, size);
-    }
-    @PostMapping("/import")
-    public ResponseEntity<?> importerLinges(
-            @RequestBody List<LingeImportRequest> requests) {
-
-        try {
-
-            List<Linge> linges =
-                    lingeImportService.importerLinges(requests);
-
-            return ResponseEntity.ok(linges);
-
-        } catch (RuntimeException e) {
-
-            return ResponseEntity
-                    .badRequest()
-                    .body(
-                            "Erreur import linges : "
-                                    + e.getMessage()
-                    );
-
-        } catch (Exception e) {
-
-            return ResponseEntity
-                    .internalServerError()
-                    .body(
-                            "Erreur interne : "
-                                    + e.getMessage()
-                    );
-        }
-    }
 
     @Data public static class ChangerEtatRequest { private EtatLinge etat; private String matriculeAgent; private String observations; }
 }

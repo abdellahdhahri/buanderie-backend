@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import tn.softsys.buanderie.entity.enums.CodeEtape;
 import tn.softsys.buanderie.entity.enums.Zone;
 
 @Entity
@@ -44,4 +45,17 @@ public class LingeEtape {
 
     @Column(nullable = false, unique = true)
     private Integer ordre;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "code", length = 30, unique = true)
+    private CodeEtape code;
+
+    @Column(name = "actif", nullable = false, columnDefinition = "boolean default true")
+    private Boolean actif = true;
+
+    @Column(name = "obligatoire", nullable = false, columnDefinition = "boolean default false")
+    private Boolean obligatoire = false;
+
+    @Column(name = "privilege_requis", length = 50)
+    private String privilegeRequis;
 }

@@ -1,6 +1,5 @@
 package tn.softsys.buanderie.entity;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import tn.softsys.buanderie.entity.enums.EtatBac;

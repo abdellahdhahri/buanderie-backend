@@ -2,8 +2,8 @@ package tn.softsys.buanderie.service.management;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
-import tn.softsys.buanderie.Sqlserver.dtos.PersonnelDto;
+import tn.softsys.buanderie.service.referentiel.PersonnelReferentielService;
+import tn.softsys.buanderie.dto.PersonnelDto;
 import tn.softsys.buanderie.dto.PersonnelStatDTO;
 import tn.softsys.buanderie.entity.enums.TypeOperation;
 import tn.softsys.buanderie.repository.HistoriqueLingeRepository;
@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 public class PersonnelStatistiqueService {
 
     private final HistoriqueLingeRepository historiqueLingeRepository;
-    private final CubixPersonnelService personnelService;
+    private final PersonnelReferentielService personnelService;
 
     private LocalDateTime toLocalDateTime(Object value) {
         if (value == null) {

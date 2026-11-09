@@ -1,13 +1,17 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.repository.ServiceRepository;
+import tn.softsys.buanderie.entity.ServiceEntity;
+import tn.softsys.buanderie.repository.PersonnelRepository;
+import tn.softsys.buanderie.entity.Personnel;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.*;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.*;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Chambre;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Lit;
+import tn.softsys.buanderie.dto.ChambreDto;
+import tn.softsys.buanderie.dto.LitDto;
+import tn.softsys.buanderie.service.referentiel.ChambreLitReferentielService;
+import tn.softsys.buanderie.entity.enums.CodeEtape;
+import tn.softsys.buanderie.service.management.ParcoursService;
 import tn.softsys.buanderie.dto.Livraison.DistributionRequest;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
@@ -32,11 +36,10 @@ public class DistributionService {
     private final AgentRepository              agentRepo;
     private final HistoriqueLingeRepository    historiqueRepo;
 
-    private final SqlServerChambreRepository   sqlChambreRepo;
-    private final SqlServerLitRepository       sqlLitRepo;
-    private final SqlServerSejourRepository    sqlSejourRepo;
-    private final SqlServerServiceRepository   sqlServiceRepo;
-    private final SqlServerPersonnelRepository sqlPersonnelRepo;
+    private final ChambreLitReferentielService chambreLitService;
+    private final ParcoursService parcoursService;
+    private final ServiceRepository   sqlServiceRepo;
+    private final PersonnelRepository sqlPersonnelRepo;
 
 
 
@@ -47,15 +50,14 @@ public class DistributionService {
 //                .orElseThrow(() -> new ResourceNotFoundException(
 //                        "Agent", "matricule", matriculeAgent));
 
-        Chambre chambre = sqlChambreRepo.findByCodeBarre(codeBarre)
-                .orElseThrow(() -> new BusinessException(
-                        "Chambre introuvable : " + codeBarre));
+        ChambreDto chambre = chambreLitService.getChambreByCodeBarre(codeBarre);
+        if (chambre == null) {
+            throw new BusinessException("Chambre introuvable : " + codeBarre);
+        }
 
-        Set<Long> litsInfectes = sqlSejourRepo.findLitsInfectes()
-                .stream().map(Lit::getId).collect(Collectors.toSet());
+        Set<Long> litsInfectes = chambreLitService.getIdsLitsInfectes();
 
-        List<Lit> lits = sqlLitRepo.findByChambreId(
-                chambre.getId(), PageRequest.of(0, 50)).getContent();
+        List<LitDto> lits = chambreLitService.getLitsByChambre(chambre.getId());
 
         List<Map<String, Object>> litsDto = lits.stream().map(lit -> {
             List<Linge> poses = lingeRepo
@@ -75,7 +77,7 @@ public class DistributionService {
             );
         }).collect(Collectors.toList());
 
-        List<Linge> disponibles = lingeRepo.findByEtat(EtatLinge.STOCKE).stream()
+        List<Linge> disponibles = lingesDisponibles().stream()
                 .filter(l -> l.getChambreIdSqlServer() == null
                         || l.getChambreIdSqlServer().equals(chambre.getId()))
                 .collect(Collectors.toList());
@@ -104,18 +106,17 @@ public class DistributionService {
 
         Linge linge = findLinge(codeOuTag);
 
-        if (linge.getEtat() != EtatLinge.STOCKE)
+        if (!etatsDisponibles().contains(linge.getEtat()))
             throw new BusinessException(
                     "Linge non disponible — état : " + linge.getEtat()
-                            + " (attendu : STOCKE)");
+                            + " (attendu : " + libelleEtatsDisponibles() + ")");
 
         if (linge.getLitIdSqlServer() != null)
             throw new BusinessException(
                     "Linge déjà affecté au lit " + linge.getLitIdSqlServer());
 
-        // Déduire le serviceId depuis la chambre SQL Server
-        Long serviceId = sqlChambreRepo.findById(chambreId)
-                .map(ch -> ch.getService() != null ? ch.getService().getId() : null)
+        Long serviceId = chambreLitService.findChambreById(chambreId)
+                .map(ChambreDto::getServiceId)
                 .orElse(null);
 
         EtatLinge ancien = linge.getEtat();
@@ -163,12 +164,12 @@ public class DistributionService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Agent", "matricule", matriculeAgent));
 
-        tn.softsys.buanderie.Sqlserver.sqlServerEntities.Service svc =
+        ServiceEntity svc =
                 sqlServiceRepo.findById(serviceId)
                         .orElseThrow(() -> new ResourceNotFoundException(
                                 "Service", "id", serviceId));
 
-        List<Linge> disponibles = lingeRepo.findByEtat(EtatLinge.STOCKE).stream()
+        List<Linge> disponibles = lingesDisponibles().stream()
                 .filter(l -> serviceId.equals(l.getServiceId()) || l.getServiceId() == null)
                 .collect(Collectors.toList());
 
@@ -203,7 +204,7 @@ public class DistributionService {
 
         Linge linge = findLinge(codeOuTag);
 
-        if (linge.getEtat() != EtatLinge.STOCKE)
+        if (!etatsDisponibles().contains(linge.getEtat()))
             throw new BusinessException(
                     "Linge non disponible — état : " + linge.getEtat());
 
@@ -253,7 +254,7 @@ public class DistributionService {
         List<Linge> enPossession = lingeRepo.findByPorteurIdAndEtat(
                 p.getId(), EtatLinge.LIVRE);
 
-        List<Linge> disponibles = lingeRepo.findByEtat(EtatLinge.STOCKE).stream()
+        List<Linge> disponibles = lingesDisponibles().stream()
                 .filter(l -> CategLinge.UNIFORME == l.getCategorie()
                         && (l.getPorteurId() == null || l.getPorteurId().equals(p.getId())))
                 .collect(Collectors.toList());
@@ -288,7 +289,7 @@ public class DistributionService {
 
         Linge linge = findLinge(codeOuTag);
 
-        if (linge.getEtat() != EtatLinge.STOCKE)
+        if (!etatsDisponibles().contains(linge.getEtat()))
             throw new BusinessException(
                     "Linge non disponible — état : " + linge.getEtat());
 
@@ -331,7 +332,7 @@ public class DistributionService {
 //                .orElseThrow(() -> new ResourceNotFoundException(
 //                        "Agent", "matricule", request.getMatriculeAgent()));
 
-        tn.softsys.buanderie.Sqlserver.sqlServerEntities.Service service =
+        ServiceEntity service =
                 sqlServiceRepo.findById(request.getServiceId())
                         .orElseThrow(() -> new ResourceNotFoundException(
                                 "Service", "id", request.getServiceId()));
@@ -456,6 +457,23 @@ public class DistributionService {
     }
 
 
+
+    private Set<EtatLinge> etatsDisponibles() {
+        Set<EtatLinge> etats = parcoursService.etatsAcceptes(CodeEtape.DISTRIBUTION);
+        return etats.isEmpty() ? Set.of(EtatLinge.STOCKE) : etats;
+    }
+
+    private String libelleEtatsDisponibles() {
+        return String.join(", ", etatsDisponibles().stream().map(Enum::name).toList());
+    }
+
+    private List<Linge> lingesDisponibles() {
+        List<Linge> resultat = new ArrayList<>();
+        for (EtatLinge etat : etatsDisponibles()) {
+            resultat.addAll(lingeRepo.findByEtat(etat));
+        }
+        return resultat;
+    }
 
     private Linge findLinge(String code) {
         return lingeRepo.findByCodeBarre(code)

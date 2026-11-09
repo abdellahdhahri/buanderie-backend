@@ -1,25 +1,77 @@
 package tn.softsys.buanderie.controller;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.*;
-import tn.softsys.buanderie.entity.Chambre;
-import tn.softsys.buanderie.entity.Lit;
-import tn.softsys.buanderie.exception.ResourceNotFoundException;
-import tn.softsys.buanderie.repository.ChambreRepository;
-import tn.softsys.buanderie.repository.LitRepository;
+
 import java.util.List;
-@RestController @RequestMapping("/api/lits") @RequiredArgsConstructor
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import lombok.RequiredArgsConstructor;
+import tn.softsys.buanderie.dto.InfectionRequest;
+import tn.softsys.buanderie.dto.LitDetailDTO;
+import tn.softsys.buanderie.dto.LitRequest;
+import tn.softsys.buanderie.service.management.LitService;
+
+@RestController
+@RequestMapping("/api/lits")
+@RequiredArgsConstructor
 public class LitController {
-    private final LitRepository litRepository;
-    private final ChambreRepository chambreRepository;
-    @GetMapping public List<Lit> liste() { return litRepository.findAll(); }
-    @GetMapping("/chambre/{chambreId}") public List<Lit> getByChambre(@PathVariable Long chambreId) { return litRepository.findByChambreId(chambreId); }
-    @PostMapping @ResponseStatus(HttpStatus.CREATED)
-    public Lit creer(@RequestBody Lit lit, @RequestParam Long chambreId) {
-        Chambre c = chambreRepository.findById(chambreId).orElseThrow(() -> new ResourceNotFoundException("Chambre", chambreId));
-        lit.setChambre(c); return litRepository.save(lit);
+
+    private final LitService litService;
+
+    @GetMapping
+    public List<LitDetailDTO> liste(
+            @RequestParam(required = false) Long chambreId,
+            @RequestParam(defaultValue = "false") boolean tous) {
+        return litService.lister(chambreId, tous);
     }
-    @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void supprimer(@PathVariable Long id) { litRepository.deleteById(id); }
 
+    @GetMapping("/chambre/{chambreId}")
+    public List<LitDetailDTO> getByChambre(
+            @PathVariable Long chambreId,
+            @RequestParam(defaultValue = "false") boolean tous) {
+        return litService.lister(chambreId, tous);
+    }
 
+    @GetMapping("/infectes")
+    public List<LitDetailDTO> infectes() {
+        return litService.listerInfectes();
+    }
+
+    @GetMapping("/code/{code}")
+    public ResponseEntity<LitDetailDTO> parCode(@PathVariable String code) {
+        return litService.trouverParCode(code)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/{id}")
+    public LitDetailDTO trouver(@PathVariable Long id) {
+        return litService.trouver(id);
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public LitDetailDTO creer(@RequestBody LitRequest request, @RequestParam(required = false) Long chambreId) {
+        if (request.getChambreId() == null) {
+            request.setChambreId(chambreId);
+        }
+        return litService.creer(request);
+    }
+
+    @PutMapping("/{id}")
+    public LitDetailDTO modifier(@PathVariable Long id, @RequestBody LitRequest request) {
+        return litService.modifier(id, request);
+    }
+
+    @PatchMapping("/{id}/infection")
+    public LitDetailDTO infection(@PathVariable Long id, @RequestBody InfectionRequest request) {
+        return litService.definirInfection(id, request.getInfecte());
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void desactiver(@PathVariable Long id) {
+        litService.desactiver(id);
+    }
 }

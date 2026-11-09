@@ -10,8 +10,6 @@ import tn.softsys.buanderie.entity.enums.EtatLot;
 import tn.softsys.buanderie.entity.enums.TypeCollecte;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 @Entity
 @Table(name = "lots")
@@ -41,7 +39,9 @@ public class Lot {
     @Builder.Default
     private Double capaciteMax= 10.0;
     @Builder.Default
-    private Double poidsActuel = 0.0;  
+    private Double poidsActuel = 0.0;
+
+    private Double poidsBalance;
     @PrePersist
     public void prePersist() {
         dateCreation = LocalDateTime.now();

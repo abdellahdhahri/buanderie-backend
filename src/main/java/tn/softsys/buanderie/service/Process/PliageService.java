@@ -3,15 +3,18 @@ package tn.softsys.buanderie.service.Process;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
+import tn.softsys.buanderie.repository.PersonnelRepository;
+import tn.softsys.buanderie.entity.Personnel;
 import tn.softsys.buanderie.dto.PliageRequest;
-import tn.softsys.buanderie.entity.Agent;
 import tn.softsys.buanderie.entity.HistoriqueLinge;
 import tn.softsys.buanderie.entity.Linge;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
 import tn.softsys.buanderie.entity.enums.TypeOperation;
 import tn.softsys.buanderie.exception.BusinessException;
+import tn.softsys.buanderie.entity.enums.CodeEtape;
+import tn.softsys.buanderie.service.management.ParcoursService;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import tn.softsys.buanderie.exception.ResourceNotFoundException;
 import tn.softsys.buanderie.repository.AgentRepository;
 import tn.softsys.buanderie.repository.HistoriqueLingeRepository;
@@ -29,10 +32,13 @@ public class PliageService {
     private final LingeRepository lingeRepository;
     private final AgentRepository agentRepository;
     private final HistoriqueLingeRepository historiqueRepository;
-    private final SqlServerPersonnelRepository sqlPersonnelRepo;
+    private final PersonnelRepository sqlPersonnelRepo;
+    private final ParcoursService parcoursService;
 
     @Transactional
     public Linge plier(PliageRequest request) {
+        parcoursService.exigerActive(CodeEtape.PLIAGE);
+
 
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
 //                .orElseThrow(() ->
@@ -43,9 +49,15 @@ public class PliageService {
 
         Linge linge = rechercherLinge(request.getCodeOuTag());
 
-        if (linge.getEtat() != EtatLinge.SECHE) {
+        Set<EtatLinge> etatsAcceptes = new LinkedHashSet<>(parcoursService.etatsAcceptes(CodeEtape.PLIAGE));
+        if (etatsAcceptes.isEmpty()) {
+            etatsAcceptes.add(EtatLinge.SECHE);
+        }
+        if (!etatsAcceptes.contains(linge.getEtat())) {
             throw new BusinessException(
-                    "Le linge doit être en état SECHE.");
+                    "Le linge doit être dans l'un des états suivants : "
+                            + String.join(", ", etatsAcceptes.stream().map(Enum::name).toList())
+                            + " (état actuel : " + linge.getEtat() + ").");
         }
 
         EtatLinge ancienEtat = linge.getEtat();

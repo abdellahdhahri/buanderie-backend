@@ -31,7 +31,8 @@ public class CycleLavage {
 
     @ManyToOne(fetch = FetchType.LAZY)
     private Agent agent;
-
+    @Column(name = "personnel_id")
+    private Long personnelId;
     private LocalDateTime dateDebut;
     private LocalDateTime dateFin;
 

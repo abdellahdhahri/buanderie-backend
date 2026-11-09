@@ -3,14 +3,17 @@ package tn.softsys.buanderie.controller;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
+import tn.softsys.buanderie.repository.PersonnelRepository;
+import tn.softsys.buanderie.entity.Personnel;
 import tn.softsys.buanderie.dto.Reception.ReceptionRFIDRequest;
 import tn.softsys.buanderie.dto.Reception.ReceptionRequest;
 import tn.softsys.buanderie.entity.Agent;
 import tn.softsys.buanderie.repository.AgentRepository;
 import tn.softsys.buanderie.service.Process.ReceptionService;
 import tn.softsys.buanderie.service.Process.ReceptionService.ReceptionResultDTO;
+
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/reception")
@@ -19,7 +22,7 @@ public class ReceptionController {
 
     private final ReceptionService service;
     private final AgentRepository agentRepository;
-    private final  SqlServerPersonnelRepository personnelRepo;
+    private final  PersonnelRepository personnelRepo;
 
     @PostMapping
     public ResponseEntity<ReceptionResultDTO> recevoir(
@@ -31,6 +34,22 @@ public class ReceptionController {
 
         ReceptionResultDTO result = service.recevoirPlusieurs(request, matricule);
         return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/linge")
+    public ResponseEntity<Map<String, Object>> recevoirLingeSansBac(
+            @RequestParam String codeLinge,
+            @RequestParam String matricule,
+            @RequestParam(required = false) Boolean infecte) {
+        return ResponseEntity.ok(service.recevoirLingeSansBac(codeLinge, matricule, infecte));
+    }
+
+    @PostMapping("/linges")
+    public ResponseEntity<Map<String, Object>> recevoirLingesSansBac(
+            @RequestBody List<String> codesLinges,
+            @RequestParam String matricule,
+            @RequestParam(required = false) Boolean infecte) {
+        return ResponseEntity.ok(service.recevoirLingesSansBac(codesLinges, matricule, infecte));
     }
 
    /* @PostMapping("/receptionRfid")

@@ -1,11 +1,11 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.repository.PersonnelRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.*;
-import tn.softsys.buanderie.Sqlserver.dtos.PersonnelDto;
-import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
+import tn.softsys.buanderie.dto.PersonnelDto;
+import tn.softsys.buanderie.service.referentiel.PersonnelReferentielService;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
 import tn.softsys.buanderie.exception.*;
@@ -26,15 +26,14 @@ public class CollecteUniformeService {
     private final CollecteRepository collecteRepo;
     private final CollecteLingeRepository collecteLingeRepo;
     private final HistoriqueLingeRepository historiqueRepo;
-    private final SqlServerPersonnelRepository sqlPersonnelRepo;
-    private final SqlServerSejourRepository sqlSejourRepo;
-    private final CubixPersonnelService cubixPersonnelService;
+    private final PersonnelRepository sqlPersonnelRepo;
+    private final PersonnelReferentielService personnelReferentielService;
     public Map<String, Object> ouvrirUniforme(
             String matriculeAgent,
             String codeBadge) {
 
 
-        PersonnelDto agent = cubixPersonnelService.getByCode(matriculeAgent);
+        PersonnelDto agent = personnelReferentielService.getByCode(matriculeAgent);
 //                .orElseThrow(() ->
 //                        new ResourceNotFoundException(
 //                                "Agent",
@@ -42,7 +41,7 @@ public class CollecteUniformeService {
 //                                matriculeAgent
 //                        )
 //                );
-        PersonnelDto p = cubixPersonnelService.getByCode(codeBadge);
+        PersonnelDto p = personnelReferentielService.getByCode(codeBadge);
 
         if (p == null) {
             throw new BusinessException(
@@ -75,12 +74,12 @@ public class CollecteUniformeService {
 
         uf.forEach(l -> {
 
-          //  if (l.getStatutCollecte()
+            //  if (l.getStatutCollecte()
             //        == StatutCollecteLinge.PROPRE) {
 
-                l.setStatutCollecte(null);
-                lingeRepo.save(l);
-         //   }
+            l.setStatutCollecte(null);
+            lingeRepo.save(l);
+            //   }
         });
 
 
@@ -202,7 +201,7 @@ public class CollecteUniformeService {
         lingeRepo.save(l);
         collecteLingeRepo.save(CollecteLinge.builder().collecte(c).linge(l).typeCollecte(tc).numeroSacInfecte(inf ? bac.getCode() : null).dateScan(LocalDateTime.now()).build());
         historiqueRepo.save(HistoriqueLinge.builder().linge(l).etatAvant(av).etatApres(ne)
-             //   agent(c.getAgent())
+                //   agent(c.getAgent())
                 .typeOperation(inf ? TypeOperation.DECLARATION_SAC_INFECTE : TypeOperation.COLLECTE).dateOperation(LocalDateTime.now()).collecte(c).observations((inf ? "INFECTE" : "BLANC") + " uniforme=" + codeUniforme + " bac=" + bac.getCode()).build());
         return Map.of("lingeId", l.getId(), "codeBarre", l.getCodeBarre(), "categorie", l.getCategorie().name(), "statut", inf ? "INFECTE" : "BLANC", "bac", bac.getCode());
     }
@@ -216,7 +215,7 @@ public class CollecteUniformeService {
         lingeRepo.save(l);
         collecteLingeRepo.save(CollecteLinge.builder().collecte(c).linge(l).typeCollecte(TypeCollecte.MANQUANT).dateScan(LocalDateTime.now()).build());
         historiqueRepo.save(HistoriqueLinge.builder().linge(l).etatAvant(av).etatApres(EtatLinge.MANQUANT)
-               // .agent(c.getAgent())
+                // .agent(c.getAgent())
                 .typeOperation(TypeOperation.CHANGEMENT_ETAT_LINGE).dateOperation(LocalDateTime.now()).collecte(c).observations("Uniforme manquant").build());
         return Map.of("lingeId", lingeId, "statut", "MANQUANT");
     }

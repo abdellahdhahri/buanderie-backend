@@ -4,16 +4,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import tn.softsys.buanderie.Sqlserver.Cubix.CubixChambreService;
-import tn.softsys.buanderie.Sqlserver.Cubix.CubixLitService;
-import tn.softsys.buanderie.Sqlserver.Cubix.CubixLitsInfectesService;
 
-import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
-import tn.softsys.buanderie.Sqlserver.dtos.CubixLitDto;
-import tn.softsys.buanderie.Sqlserver.dtos.CubixLitInfecteDto;
-import tn.softsys.buanderie.Sqlserver.dtos.PersonnelDto;
+import tn.softsys.buanderie.service.referentiel.PersonnelReferentielService;
+import tn.softsys.buanderie.dto.PersonnelDto;
 
 import tn.softsys.buanderie.dto.ChambreDto;
+import tn.softsys.buanderie.dto.LitDto;
+import tn.softsys.buanderie.dto.LitInfecteDto;
+import tn.softsys.buanderie.service.referentiel.ChambreLitReferentielService;
 
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
@@ -43,10 +41,8 @@ public class CollecteChambreService {
 
 
 
-    private final CubixPersonnelService personnelService;
-    private final CubixChambreService cubixChambreService;
-    private final CubixLitService cubixLitService;
-    private final CubixLitsInfectesService cubixLitsInfectesService;
+    private final PersonnelReferentielService personnelService;
+    private final ChambreLitReferentielService chambreLitService;
 
 
 
@@ -79,11 +75,11 @@ public class CollecteChambreService {
 
 
 
-        CubixLitDto lit = cubixLitService.getById(litId);
+        LitDto lit = chambreLitService.getLitById(litId);
 
         if (lit == null) {
             throw new BusinessException(
-                    "Lit introuvable dans Cubix : " + litId
+                    "Lit introuvable : " + litId
             );
         }
 
@@ -105,8 +101,8 @@ public class CollecteChambreService {
 
 
         boolean infecte =
-                cubixLitsInfectesService
-                        .getAll()
+                chambreLitService
+                        .getLitsInfectes()
                         .stream()
                         .anyMatch(l ->
                                 Objects.equals(
@@ -209,8 +205,8 @@ public class CollecteChambreService {
 
 
         ChambreDto chambre =
-                cubixChambreService
-                        .getByCodeBarre(codeBarre);
+                chambreLitService
+                        .getChambreByCodeBarre(codeBarre);
 
         if (chambre == null) {
             throw new BusinessException(
@@ -222,22 +218,22 @@ public class CollecteChambreService {
 
 
 
-        List<CubixLitInfecteDto> litsInfectes =
-                cubixLitsInfectesService.getAll();
+        List<LitInfecteDto> litsInfectes =
+                chambreLitService.getLitsInfectes();
 
         Set<Long> idsLitsInfectes =
                 litsInfectes
                         .stream()
-                        .map(CubixLitInfecteDto::getId)
+                        .map(LitInfecteDto::getId)
                         .filter(Objects::nonNull)
                         .collect(Collectors.toSet());
 
 
 
 
-        List<CubixLitDto> lits =
-                cubixLitService
-                        .getByChambreId(chambreId);
+        List<LitDto> lits =
+                chambreLitService
+                        .getLitsByChambre(chambreId);
 
 
         if (lits == null) {
@@ -262,7 +258,7 @@ public class CollecteChambreService {
                 new ArrayList<>();
 
 
-        for (CubixLitDto lit : lits) {
+        for (LitDto lit : lits) {
 
             if (lit == null || lit.getId() == null) {
                 continue;
@@ -598,13 +594,13 @@ public class CollecteChambreService {
             );
         }
 
-        CubixLitDto lit =
-                cubixLitService.getById(litId);
+        LitDto lit =
+                chambreLitService.getLitById(litId);
 
         if (lit == null) {
 
             throw new BusinessException(
-                    "Lit introuvable dans Cubix : " + litId
+                    "Lit introuvable : " + litId
             );
         }
 
@@ -621,8 +617,8 @@ public class CollecteChambreService {
         }
 
         boolean infecte =
-                cubixLitsInfectesService
-                        .getAll()
+                chambreLitService
+                        .getLitsInfectes()
                         .stream()
                         .anyMatch(l ->
                                 Objects.equals(
@@ -636,45 +632,51 @@ public class CollecteChambreService {
         SacInfecte sacInfecte = null;
 
         if (infecte) {
+
             sacInfecte =
                     sacInfecteRepository
-                            .findByNumeroSac(
-                                    codeContenant
-                            )
-                            .orElseThrow(() ->
-                                    new BusinessException(
-                                            "Sac infecté introuvable : "
-                                                    + codeContenant
-                                    )
-                            );
+                            .findByNumeroSac(codeContenant)
+                            .orElse(null);
+
+            if (sacInfecte == null) {
+
+                bac =
+                        bacRepo.findByCode(codeContenant)
+                                .or(() -> bacRepo.findByRfidTag(codeContenant))
+                                .orElseThrow(() ->
+                                        new BusinessException(
+                                                "Sac ou bac infecté introuvable : "
+                                                        + codeContenant
+                                        )
+                                );
+
+                if (bac.getTypebac() != TypeBac.INFECTE) {
+                    throw new BusinessException(
+                            "Ce lit est infecté. "
+                                    + "Veuillez scanner un sac infecté ou un bac INFECTE."
+                    );
+                }
+            }
 
         } else {
+
             bac =
-                    bacRepo.findByCode(
-                                    codeContenant
-                            )
-                            .or(() ->
-                                    bacRepo.findByRfidTag(
-                                            codeContenant
-                                    )
-                            )
+                    bacRepo.findByCode(codeContenant)
+                            .or(() -> bacRepo.findByRfidTag(codeContenant))
                             .orElseThrow(() ->
                                     new BusinessException(
-                                            "Bac introuvable : "
-                                                    + codeContenant
+                                            "Bac introuvable : " + codeContenant
                                     )
                             );
 
-
-            if (bac.getTypebac()
-                    != TypeBac.BLANC) {
-
+            if (bac.getTypebac() != TypeBac.BLANC) {
                 throw new BusinessException(
                         "Ce lit n'est pas infecté. "
                                 + "Veuillez scanner un bac BLANC."
                 );
             }
         }
+
 
         List<Linge> linges =
                 lingeRepo.findByLitIdSqlServerInAndEtat(
@@ -734,7 +736,7 @@ public class CollecteChambreService {
         }
 
 
-        if (!infecte) {
+        if (bac != null) {
 
             int nbActuel =
                     lingeRepo.findByBacId(bac.getId()).size();
@@ -776,7 +778,7 @@ public class CollecteChambreService {
                         : TypeCollecte.BLANC;
 
         String codeContenantFinal =
-                infecte
+                sacInfecte != null
                         ? sacInfecte.getNumeroSac()
                         : bac.getCode();
 
@@ -790,7 +792,7 @@ public class CollecteChambreService {
                     linge.getEtat();
 
 
-            if (infecte) {
+            if (sacInfecte != null) {
 
                 linge.setSacInfecte(
                         sacInfecte
@@ -854,8 +856,7 @@ public class CollecteChambreService {
 
                             .numeroSacInfecte(
                                     infecte
-                                            ? sacInfecte
-                                              .getNumeroSac()
+                                            ? codeContenantFinal
                                             : null
                             )
 
@@ -930,9 +931,9 @@ public class CollecteChambreService {
                 codeContenantFinal,
 
                 "typeContenant",
-                infecte
+                sacInfecte != null
                         ? "SAC_INFECTE"
-                        : "BAC_BLANC",
+                        : infecte ? "BAC_INFECTE" : "BAC_BLANC",
 
                 "estInfecte",
                 infecte,

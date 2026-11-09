@@ -30,3 +30,5 @@ public class AffectationLitController {
     public ResponseEntity<Map<String,Object>> etat(@PathVariable Long chambreId){
         return ResponseEntity.ok(service.getEtatChambre(chambreId));}
 }
+
+

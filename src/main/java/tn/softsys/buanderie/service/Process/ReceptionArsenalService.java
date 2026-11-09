@@ -18,11 +18,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
 
-import tn.softsys.buanderie.Sqlserver.Cubix.ArsenalCubixService;
-import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
-import tn.softsys.buanderie.Sqlserver.dtos.ArsenalDto;
-import tn.softsys.buanderie.Sqlserver.dtos.PersonnelDto;
-import tn.softsys.buanderie.Sqlserver.dtos.EmplacementDto;
+import tn.softsys.buanderie.service.referentiel.ArsenalReferentielService;
+import tn.softsys.buanderie.service.referentiel.PersonnelReferentielService;
+import tn.softsys.buanderie.dto.ArsenalDto;
+import tn.softsys.buanderie.dto.PersonnelDto;
+import tn.softsys.buanderie.dto.EmplacementDto;
 import tn.softsys.buanderie.dto.ReceptionArsenalRequestDTO;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.CategLinge;
@@ -41,8 +41,8 @@ public class ReceptionArsenalService {
     private final ReceptionArsenalItemRepository receptionArsenalItemRepository;
     private final ReceptionArsenalEmplacementRepository receptionArsenalEmplacementRepository;
     private final StockArsenalRepository stockArsenalRepository;
-    private final ArsenalCubixService arsenalCubixService;
-    private final CubixPersonnelService personnelService;
+    private final ArsenalReferentielService arsenalReferentielService;
+    private final PersonnelReferentielService personnelService;
     private final RemiseLingeLingeRepository remiseLingeLingeRepository;
     private final LingeRepository lingeRepository;
     private final LingeArsenalRepository lingeArsenalRepository;
@@ -75,7 +75,7 @@ public class ReceptionArsenalService {
 
         // 3. Charger les emplacements autorisés de cet Arsenal
         List<EmplacementDto> emplacements =
-                arsenalCubixService.getEmplacements(arsenalID);
+                arsenalReferentielService.getEmplacements(arsenalID);
 
         if (emplacements == null || emplacements.isEmpty()) {
             throw new IllegalArgumentException(
@@ -367,9 +367,64 @@ public class ReceptionArsenalService {
         return reponse;
     }
 
+    /**
+     * Annule le rangement en arsenal d'un linge : il retire l'étagère,
+     * repasse à l'état LIVRE et redevient « à ranger » pour sa remise.
+     */
+    @Transactional
+    public Map<String, Object> annulerRangement(String codeLinge, String badgeAgent) {
+        Linge linge = rechercherLinge(codeLinge);
+
+        RemiseLingeLinge lien = remiseLingeLingeRepository
+                .findFirstByLinge_IdAndDateRangementIsNotNullOrderByDateRangementDesc(linge.getId())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Le linge " + linge.getCodeBarre() + " n'est rangé dans aucun arsenal."));
+
+        if (linge.getEtat() != EtatLinge.STOCKE) {
+            throw new IllegalArgumentException("Le linge " + linge.getCodeBarre()
+                    + " n'est plus en stock (" + linge.getEtat() + ") : son rangement ne peut plus être annulé.");
+        }
+
+        RemiseLinge remise = lien.getRemiseLinge();
+        Long personnelId = badgeAgent != null && !badgeAgent.isBlank()
+                ? getAgent(badgeAgent).getId()
+                : remise.getPersonnelId();
+        Long ancienEmplacement = linge.getArsenalEmplacementID();
+        LocalDateTime maintenant = LocalDateTime.now();
+
+        linge.setArsenalEmplacementID(null);
+        linge.setEtat(EtatLinge.LIVRE);
+        lingeRepository.save(linge);
+
+        lien.setDateRangement(null);
+        remiseLingeLingeRepository.save(lien);
+
+        historiqueLingeRepository.save(
+                HistoriqueLinge.builder()
+                        .linge(linge)
+                        .personnelId(personnelId)
+                        .etatAvant(EtatLinge.STOCKE)
+                        .etatApres(EtatLinge.LIVRE)
+                        .typeOperation(TypeOperation.CHANGEMENT_ETAT_LINGE)
+                        .dateOperation(maintenant)
+                        .observations("Annulation du rangement (emplacement " + ancienEmplacement
+                                + ") — remise " + remise.getNumeroLivraison())
+                        .build()
+        );
+
+        Map<String, Object> reponse = new LinkedHashMap<>();
+        reponse.put("message", "Rangement de " + linge.getCodeBarre() + " annulé.");
+        reponse.put("codeBarre", linge.getCodeBarre());
+        reponse.put("categorie", lien.getCategorie().name());
+        reponse.put("remiseLingeId", remise.getId());
+        reponse.put("arsenalEmplacementID", ancienEmplacement);
+        reponse.put("resteARanger", remiseLingeLingeRepository.countByRemiseLinge_IdAndDateRangementIsNull(remise.getId()));
+        return reponse;
+    }
+
     @Transactional(readOnly = true)
     public Map<String, Object> getStockArsenal(Long arsenalID) {
-        List<EmplacementDto> emplacements = arsenalCubixService.getEmplacements(arsenalID);
+        List<EmplacementDto> emplacements = arsenalReferentielService.getEmplacements(arsenalID);
         if (emplacements == null) {
             emplacements = List.of();
         }
@@ -443,7 +498,7 @@ public class ReceptionArsenalService {
             return reponse;
         }
 
-        EmplacementDto emplacement = arsenalCubixService
+        EmplacementDto emplacement = arsenalReferentielService
                 .getEmplacementById(linge.getArsenalEmplacementID())
                 .orElse(null);
 
@@ -498,7 +553,7 @@ public class ReceptionArsenalService {
             throw new IllegalArgumentException("Veuillez choisir ou scanner un emplacement.");
         }
         String valeur = emplacement.trim();
-        return arsenalCubixService.getEmplacements(arsenalID).stream()
+        return arsenalReferentielService.getEmplacements(arsenalID).stream()
                 .filter(e -> valeur.equals(e.getCodeBarre()) || valeur.equals(String.valueOf(e.getEmplacementID())))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -539,7 +594,7 @@ public class ReceptionArsenalService {
 
     private String nomArsenal(Long arsenalID) {
         try {
-            return arsenalCubixService.getArsenaux().stream()
+            return arsenalReferentielService.getArsenaux().stream()
                     .filter(a -> Objects.equals(a.getArsenalID(), arsenalID))
                     .map(ArsenalDto::getDesignation)
                     .findFirst()

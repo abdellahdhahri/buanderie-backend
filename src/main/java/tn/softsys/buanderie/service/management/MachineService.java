@@ -73,6 +73,13 @@ public class MachineService {
         m.setLocalisation(data.getLocalisation());
         m.setEtatImmobilisation(data.getEtatImmobilisation());
 
+        if (data.getType() != null) {
+            m.setType(data.getType());
+        }
+        if (data.getEtatTechnique() != null) {
+            m.setEtatTechnique(data.getEtatTechnique());
+        }
+
         return machineRepository.save(m);
     }
 

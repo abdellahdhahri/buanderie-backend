@@ -2,7 +2,6 @@ package tn.softsys.buanderie.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Service;
 import tn.softsys.buanderie.entity.enums.EtatLivraison;
 
 import java.time.LocalDateTime;

@@ -5,7 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
+import tn.softsys.buanderie.entity.Personnel;
 import tn.softsys.buanderie.entity.PersonnelLingeEtape;
 import tn.softsys.buanderie.service.management.PersonnelLingeEtapeService;
 

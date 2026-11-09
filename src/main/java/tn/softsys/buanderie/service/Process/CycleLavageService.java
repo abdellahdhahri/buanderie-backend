@@ -3,10 +3,10 @@ package tn.softsys.buanderie.service.Process;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tn.softsys.buanderie.Sqlserver.SqlServerRepositories.SqlServerPersonnelRepository;
-import tn.softsys.buanderie.Sqlserver.dtos.PersonnelDto;
-import tn.softsys.buanderie.Sqlserver.sqlServerEntities.Personnel;
-import tn.softsys.buanderie.Sqlserver.Cubix.CubixPersonnelService;
+import tn.softsys.buanderie.repository.PersonnelRepository;
+import tn.softsys.buanderie.dto.PersonnelDto;
+import tn.softsys.buanderie.entity.Personnel;
+import tn.softsys.buanderie.service.referentiel.PersonnelReferentielService;
 import tn.softsys.buanderie.dto.Lot.LotScanResponse;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
@@ -33,8 +33,8 @@ public class CycleLavageService {
     private final HistoriqueLingeRepository historiqueLingeRepository;
     private final NotificationService notificationService;
     private final SacInfecteRepository sacInfecteRepository;
-    private final CubixPersonnelService cubixPersonnelService;
-    private final SqlServerPersonnelRepository sqlPersonnelRepo;
+    private final PersonnelReferentielService personnelReferentielService;
+    private final PersonnelRepository sqlPersonnelRepo;
 
 
     public LotScanResponse scanLot(String codeLot) {
@@ -84,24 +84,27 @@ public class CycleLavageService {
                                 "Lot", "code", codeLot
                         )
                 );
-
-        if (machine.getCapaciteKg() != null
-                && poidsCharge > machine.getCapaciteKg()) {
-
-            throw new RuntimeException("Capacité machine insuffisante");
-        }
+//
+//        if (machine.getCapaciteKg() != null
+//                && poidsCharge > machine.getCapaciteKg()) {
+//
+//            throw new RuntimeException("Capacité machine insuffisante");
+//        }
 
         if (machine.getEtatImmobilisation() != EtatImmobilisation.DISPONIBLE) {
             throw new RuntimeException("Machine indisponible");
 
         }
 
-            ProgrammeLavage programme = suggestProgramme(lot.getCategorie());
-            System.out.println("Programme = " + programme);
+        if (poidsCharge == null) {
+            poidsCharge = lot.getPoidsBalance() != null ? lot.getPoidsBalance() : lot.getPoidsActuel();
+        }
+
+        ProgrammeLavage programme = suggestProgramme(lot.getCategorie());
         CycleLavage cycle = CycleLavage.builder()
                 .machine(machine)
                 .programmeLavage(programme)
-               // .agent(agent)
+                .personnelId(agent.getId())
                 .poidsCharge(poidsCharge)
                 .dateDebut(LocalDateTime.now())
                 .statut(StatutCycle.EN_COURS)
@@ -110,10 +113,8 @@ public class CycleLavageService {
         List<Linge> linges = lingeRepository.findByLot_CodeLot(codeLot);
 
         for (Linge linge : linges) {
-            linge.setEtat(EtatLinge.EN_LAVAGE);
-          //  historiserLavage(linge, agent, EtatLinge.EN_LAVAGE);
-            System.out.println("etat du linge"+linge.getEtat());
             EtatLinge ancienEtat = linge.getEtat();
+            linge.setEtat(EtatLinge.EN_LAVAGE);
             linge.setDureVie(linge.getDureVie()-1);
             if (linge.getNbLavage() >= linge.getDureVie()) {
 
@@ -139,7 +140,7 @@ public class CycleLavageService {
         //viderLot(lot);
         machine.setEtatImmobilisation(EtatImmobilisation.EN_COURS);
         lot.setEtat(EtatLot.EN_LAVAGE);
-       // lot.setPoidsActuel(0.0);
+        // lot.setPoidsActuel(0.0);
         return cycle;
     }
     public CycleLavage addLotToCycle(Long cycleId,
@@ -150,9 +151,9 @@ public class CycleLavageService {
         Lot lot = lotRepo.findByCodeLot(codeLot)
                 .orElseThrow(() -> new ResourceNotFoundException("Lot", "code", codeLot));
         double nouveauPoids = cycle.getPoidsCharge() + poidsCharge;
-        if (nouveauPoids > cycle.getMachine().getCapaciteKg()) {
-            throw new RuntimeException("Capacité dépassée");
-        }
+//        if (nouveauPoids > cycle.getMachine().getCapaciteKg()) {
+//            throw new RuntimeException("Capacité dépassée");
+//        }
         List<Linge> linges  = lingeRepository.findByLot_CodeLot(codeLot);
         //mettre a jours l'etat des  linges
         mettreLingesEnLavage(codeLot);
@@ -228,7 +229,7 @@ public class CycleLavageService {
                                     .linge(linge)
                                     .etatAvant(ancienEtat)
                                     .etatApres(EtatLinge.LAVE)
-                                  //  .agent(cycle.getAgent())
+                                    .personnelId(cycle.getPersonnelId())
                                     .typeOperation(TypeOperation.FIN_LAVAGE)
                                     .dateOperation(LocalDateTime.now())
                                     .observations(
@@ -368,8 +369,8 @@ public class CycleLavageService {
             String matriculeAgent) {
 
         // Agent
-       // Agent agent = agentRepository.findByMatricule(matriculeAgent)
-        PersonnelDto agent = cubixPersonnelService.getByCode(matriculeAgent);
+        // Agent agent = agentRepository.findByMatricule(matriculeAgent)
+        PersonnelDto agent = personnelReferentielService.getByCode(matriculeAgent);
 
 //                .orElseThrow(() ->
 //                        new ResourceNotFoundException(
@@ -397,7 +398,7 @@ public class CycleLavageService {
         }
 
         // Machine
-    Machine machine = machineRepo.findByCode(codeMachine);
+        Machine machine = machineRepo.findByCode(codeMachine);
 
         if (machine == null) {
             throw new ResourceNotFoundException(
@@ -452,10 +453,32 @@ public class CycleLavageService {
         // Sac en lavage
         sac.setEtat(EtatSac.EN_LAVAGE);
         sac.setDateLavage(LocalDateTime.now());
-      //  sac.setAgentLavage(agent);
+        //  sac.setAgentLavage(agent);
         sac.setCycleLavage(cycle);
 
         sacInfecteRepository.save(sac);
+        for (Linge linge : sac.getLinges()) {
+
+            EtatLinge avant = linge.getEtat();
+
+            linge.setEtat(EtatLinge.INFECTE_EN_LAVAGE);
+            lingeRepository.save(linge);
+
+            historiqueLingeRepository.save(
+                    HistoriqueLinge.builder()
+                            .linge(linge)
+                            .etatAvant(avant)
+                            .etatApres(EtatLinge.INFECTE_EN_LAVAGE)
+                            .personnelId(agent != null ? agent.getId() : sac.getPersonnelId())
+                            .typeOperation(TypeOperation.LAVAGE_SAC_INFECTE)
+                            .dateOperation(LocalDateTime.now())
+                            .sacInfecte(sac)
+                            .collecte(sac.getCollecte())
+                            .observations("Mise en lavage — sac " + sac.getNumeroSac()
+                                    + " — machine " + codeMachine)
+                            .build()
+            );
+        }
 
         return cycle;
     }
