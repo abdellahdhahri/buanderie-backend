@@ -46,9 +46,9 @@ public class DistributionService {
     public Map<String, Object> scanChambrePourDistribution(
             String codeBarre, String matriculeAgent) {
 
-        sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
-//                .orElseThrow(() -> new ResourceNotFoundException(
-//                        "Agent", "matricule", matriculeAgent));
+        if (sqlPersonnelRepo.findByCodeBarre(matriculeAgent) == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
+        }
 
         ChambreDto chambre = chambreLitService.getChambreByCodeBarre(codeBarre);
         if (chambre == null) {
@@ -101,8 +101,9 @@ public class DistributionService {
                                                 String codeOuTag,
                                                 String matriculeAgent) {
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
-//                .orElseThrow(() -> new ResourceNotFoundException(
-//                        "Agent", "matricule", matriculeAgent));
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
+        }
 
         Linge linge = findLinge(codeOuTag);
 
@@ -199,8 +200,9 @@ public class DistributionService {
                                                    String codeOuTag,
                                                    String matriculeAgent) {
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
-//                .orElseThrow(() -> new ResourceNotFoundException(
-//                        "Agent", "matricule", matriculeAgent));
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
+        }
 
         Linge linge = findLinge(codeOuTag);
 
@@ -243,9 +245,9 @@ public class DistributionService {
 
     public Map<String, Object> getUniformesPourPersonnel(String codeBadge,
                                                          String matriculeAgent) {
-        sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
-//                .orElseThrow(() -> new ResourceNotFoundException(
-//                        "Agent", "matricule", matriculeAgent));
+        if (sqlPersonnelRepo.findByCodeBarre(matriculeAgent) == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
+        }
 
         Personnel p = sqlPersonnelRepo.findByCodeBarre(codeBadge);
         if (p == null)
@@ -284,8 +286,9 @@ public class DistributionService {
                                                   String codeOuTag,
                                                   String matriculeAgent) {
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
-//                .orElseThrow(() -> new ResourceNotFoundException(
-//                        "Agent", "matricule", matriculeAgent));
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
+        }
 
         Linge linge = findLinge(codeOuTag);
 
@@ -329,8 +332,9 @@ public class DistributionService {
     @Transactional
     public Distribution creerDistribution(DistributionRequest request) {
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
-//                .orElseThrow(() -> new ResourceNotFoundException(
-//                        "Agent", "matricule", request.getMatriculeAgent()));
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent());
+        }
 
         ServiceEntity service =
                 sqlServiceRepo.findById(request.getServiceId())

@@ -46,13 +46,10 @@ public class CollecteServiceService {
             Long serviceId,
             String refOuCode) {
 
-        Personnel personnel = personnelReo
-                .findByCodeBarre(matriculeAgent);
-//                .orElseThrow(() ->
-//                        new BusinessException(
-//                                "Agent introuvable : " + matriculeAgent
-//                        )
-//                );
+        Personnel personnel = personnelReo.findByCodeBarre(matriculeAgent);
+        if (personnel == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
+        }
 
         Optional<ServiceEntity> svc = resolveService(serviceId, refOuCode);
 

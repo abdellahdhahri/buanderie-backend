@@ -79,7 +79,9 @@ public class AffectationLitService {
     public Map<String, Object> affecterLinge(Long litId, Long chambreId,
                                              String codeOuTag, String matriculeAgent) {
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
-//                .orElseThrow(() -> new ResourceNotFoundException("Agent","matricule",matriculeAgent));
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
+        }
 
         Linge linge = lingeRepo.findByCodeBarre(codeOuTag)
                 .or(() -> lingeRepo.findByBarcodeOrRfid(codeOuTag))
@@ -93,7 +95,7 @@ public class AffectationLitService {
 
         linge.setLitIdSqlServer(litId);
         linge.setChambreIdSqlServer(chambreId);
-        linge.setStatutCollecte(null); // prêt pour prochaine collecte
+        linge.setStatutCollecte(null);
         lingeRepo.save(linge);
 
         historiqueRepo.save(HistoriqueLinge.builder()
@@ -116,7 +118,6 @@ public class AffectationLitService {
         );
     }
 
-    /** État actuel d'une chambre — combien de linges par lit. */
     public Map<String, Object> getEtatChambre(Long chambreId) {
         List<LitDto> lits = chambreLitService.getLitsByChambre(chambreId);
         List<Map<String,Object>> litsDto = lits.stream().map(lit -> {

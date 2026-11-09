@@ -47,12 +47,9 @@ public class StockageService {
 
         //recuperer l'agent
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
-//                .orElseThrow(() ->
-//                        new ResourceNotFoundException(
-//                                "Agent",
-//                                "matricule",
-//                                request.getMatriculeAgent()));
-        //recuperer linge
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent());
+        }
         Linge linge = rechercherLinge(request.getCodeOuTag());
         Arsenal  arsenal = getLingeEmplacement(linge.getCodeBarre());
         Set<EtatLinge> etatsAcceptes = new LinkedHashSet<>(parcoursService.etatsAcceptes(CodeEtape.STOCKAGE));
