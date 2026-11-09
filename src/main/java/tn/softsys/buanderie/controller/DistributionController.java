@@ -35,6 +35,15 @@ public class DistributionController {
                 distributionService.distribuerSurLit(chambreId, litId, codeOuTag, matriculeAgent));
     }
 
+    @PostMapping("/api/distribution/chambre/linge")
+    public ResponseEntity<Map<String, Object>> distribuerSurChambre(
+            @RequestParam Long   chambreId,
+            @RequestParam String codeOuTag,
+            @RequestParam String matriculeAgent) {
+        return ResponseEntity.ok(
+                distributionService.distribuerSurChambre(chambreId, codeOuTag, matriculeAgent));
+    }
+
     // ── SERVICE ───────────────────────────────────────────────────────
 
     @GetMapping("/api/distribution/service")

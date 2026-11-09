@@ -1,5 +1,7 @@
 package tn.softsys.buanderie.dto;
 
+import tn.softsys.buanderie.entity.enums.NiveauRattachement;
+
 import java.time.LocalDateTime;
 
 import lombok.AllArgsConstructor;
@@ -18,6 +20,7 @@ public class IdentiteResponse {
     private String nomApplication;
     private TypeEtablissement typeEtablissement;
     private Boolean circuitInfecteActif;
+    private NiveauRattachement niveauRattachement;
     private String couleurPrimaire;
     private String adresse;
     private String telephone;

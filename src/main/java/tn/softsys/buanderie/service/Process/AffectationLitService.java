@@ -1,5 +1,9 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.entity.enums.NiveauRattachement;
+
+import tn.softsys.buanderie.service.management.ProfilExploitationService;
+
 import tn.softsys.buanderie.repository.PersonnelRepository;
 import tn.softsys.buanderie.entity.Personnel;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +29,7 @@ public class AffectationLitService {
     private final AgentRepository            agentRepo;
     private final HistoriqueLingeRepository  historiqueRepo;
     private final ChambreLitReferentielService chambreLitService;
+    private final ProfilExploitationService profilExploitationService;
     private final PersonnelRepository sqlPersonnelRepo;
 
     public Map<String, Object> scanChambre(String codeBarre, String matriculeAgent) {
@@ -78,10 +83,10 @@ public class AffectationLitService {
     @Transactional
     public Map<String, Object> affecterLinge(Long litId, Long chambreId,
                                              String codeOuTag, String matriculeAgent) {
+        profilExploitationService.exigerNiveau(NiveauRattachement.LIT);
+
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
-        if (agent == null) {
-            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
-        }
+//                .orElseThrow(() -> new ResourceNotFoundException("Agent","matricule",matriculeAgent));
 
         Linge linge = lingeRepo.findByCodeBarre(codeOuTag)
                 .or(() -> lingeRepo.findByBarcodeOrRfid(codeOuTag))
@@ -95,7 +100,7 @@ public class AffectationLitService {
 
         linge.setLitIdSqlServer(litId);
         linge.setChambreIdSqlServer(chambreId);
-        linge.setStatutCollecte(null);
+        linge.setStatutCollecte(null); // prêt pour prochaine collecte
         lingeRepo.save(linge);
 
         historiqueRepo.save(HistoriqueLinge.builder()
@@ -118,6 +123,7 @@ public class AffectationLitService {
         );
     }
 
+    /** État actuel d'une chambre — combien de linges par lit. */
     public Map<String, Object> getEtatChambre(Long chambreId) {
         List<LitDto> lits = chambreLitService.getLitsByChambre(chambreId);
         List<Map<String,Object>> litsDto = lits.stream().map(lit -> {
