@@ -45,6 +45,7 @@ public class DistributionService {
     private final ProfilExploitationService profilExploitationService;
     private final ServiceRepository   sqlServiceRepo;
     private final PersonnelRepository sqlPersonnelRepo;
+    private final ArsenalRepository arsenalRepository;
 
 
 
@@ -535,6 +536,82 @@ public class DistributionService {
                 "serviceId", serviceId != null ? serviceId : 0L,
                 "statut",    "LIVRE"
         );
+    }
+
+    @Transactional
+    public Map<String, Object> retirerLinge(String codeOuTag, String matriculeAgent) {
+        Personnel agent = matriculeAgent == null || matriculeAgent.isBlank()
+                ? null
+                : sqlPersonnelRepo.findByCodeBarre(matriculeAgent.trim());
+        if (agent == null) {
+            throw new BusinessException("Agent introuvable : " + matriculeAgent);
+        }
+
+        Linge linge = findLinge(codeOuTag);
+
+        if (linge.getEtat() != EtatLinge.LIVRE) {
+            throw new BusinessException(
+                    "Seul un linge livré peut être retiré d'un lit ou d'une chambre (état actuel : "
+                            + linge.getEtat() + ").");
+        }
+
+        Long ancienLit = linge.getLitIdSqlServer();
+        Long ancienneChambre = linge.getChambreIdSqlServer();
+        if (ancienLit == null && ancienneChambre == null) {
+            throw new BusinessException("Ce linge n'est affecté à aucun lit ni à aucune chambre.");
+        }
+
+        EtatLinge etatPrecedent = EtatLinge.LIVRE;
+        for (HistoriqueLinge h : historiqueRepo.findByLingeIdOrderByDateOperationDesc(linge.getId())) {
+            if (h.getTypeOperation() == TypeOperation.LIVRAISON) {
+                if (h.getEtatAvant() != null) {
+                    etatPrecedent = h.getEtatAvant();
+                }
+                break;
+            }
+        }
+        boolean distributionAnnulee = etatPrecedent != EtatLinge.LIVRE;
+
+        linge.setLitIdSqlServer(null);
+        linge.setChambreIdSqlServer(null);
+
+        if (distributionAnnulee) {
+            linge.setEtat(etatPrecedent);
+            linge.setStatutCollecte(null);
+            if (etatPrecedent == EtatLinge.STOCKE && linge.getServiceId() != null) {
+                try {
+                    linge.setEmplacement(arsenalRepository.findByServiceId(linge.getServiceId()));
+                } catch (org.springframework.dao.IncorrectResultSizeDataAccessException e) {
+                    linge.setEmplacement(null);
+                }
+            }
+        }
+        lingeRepo.save(linge);
+
+        historiqueRepo.save(HistoriqueLinge.builder()
+                .linge(linge)
+                .etatAvant(EtatLinge.LIVRE)
+                .etatApres(linge.getEtat())
+                .personnelId(agent.getId())
+                .typeOperation(TypeOperation.CHANGEMENT_ETAT_LINGE)
+                .dateOperation(LocalDateTime.now())
+                .observations("Retiré"
+                        + (ancienLit != null ? " du lit " + ancienLit : "")
+                        + (ancienneChambre != null ? " de la chambre " + ancienneChambre : "")
+                        + (distributionAnnulee
+                        ? " : distribution annulée, retour à l'état " + etatPrecedent
+                        : " : affectation annulée"))
+                .build());
+
+        Map<String, Object> reponse = new LinkedHashMap<>();
+        reponse.put("lingeId", linge.getId());
+        reponse.put("codeBarre", linge.getCodeBarre());
+        reponse.put("categorie", linge.getCategorie().name());
+        reponse.put("ancienLitId", ancienLit);
+        reponse.put("ancienneChambreId", ancienneChambre);
+        reponse.put("origine", distributionAnnulee ? "DISTRIBUTION" : "AFFECTATION");
+        reponse.put("statut", linge.getEtat().name());
+        return reponse;
     }
 
     private Set<EtatLinge> etatsDisponibles() {
