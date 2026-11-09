@@ -250,7 +250,9 @@ public class LingeService {
     public Linge changerEtat(Long lingeId, EtatLinge nouvelEtat, String matriculeAgent, String observations) {
         Linge linge = findById(lingeId);
         Personnel agent = personnelRepository.findByCodeBarre(matriculeAgent);
-//                .orElseThrow(() -> new ResourceNotFoundException("Agent", "matricule", matriculeAgent));
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
+        }
         EtatLinge ancienEtat = linge.getEtat();
         linge.setEtat(nouvelEtat);
         lingeRepository.save(linge);
@@ -433,5 +435,3 @@ public class LingeService {
     }
 
 }
-
-

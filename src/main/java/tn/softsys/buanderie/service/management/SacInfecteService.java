@@ -270,7 +270,9 @@ public class SacInfecteService {
             throw new BusinessException("Aucun code-barre fourni.");
 
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
-//                .orElseThrow(() -> new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent()));
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent());
+        }
 
         Collecte collecte = sac.getCollecte();
 

@@ -41,11 +41,9 @@ public class PliageService {
 
 
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
-//                .orElseThrow(() ->
-//                        new ResourceNotFoundException(
-//                                "Agent",
-//                                "matricule",
-//                                request.getMatriculeAgent()));
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent());
+        }
 
         Linge linge = rechercherLinge(request.getCodeOuTag());
 

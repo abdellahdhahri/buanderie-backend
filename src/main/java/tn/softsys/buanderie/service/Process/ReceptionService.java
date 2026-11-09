@@ -11,6 +11,7 @@ import tn.softsys.buanderie.dto.SacsInfectes.SacInfecteDTO;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
 import tn.softsys.buanderie.exception.BusinessException;
+import tn.softsys.buanderie.exception.ResourceNotFoundException;
 import tn.softsys.buanderie.repository.*;
 import tn.softsys.buanderie.service.management.SacInfecteService;
 
@@ -43,6 +44,9 @@ public class ReceptionService {
 
 
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(code);
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", code);
+        }
         List<ReceptionBac> bacsRecus = new ArrayList<>();
         List<SacInfecteDTO> sacsRecus = new ArrayList<>();
         //  Réception des bacs blancs
@@ -103,6 +107,9 @@ public class ReceptionService {
     @Transactional
     public ReceptionRFIDResultDTO recevoirRFID(ReceptionRFIDRequest request, String code) {
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(code);
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", code);
+        }
 
         Bac bac = bacRepository.findByCode(request.getCodeBac())
                 .orElseThrow(() -> new RuntimeException("Bac introuvable"));
