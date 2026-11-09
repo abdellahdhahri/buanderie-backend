@@ -1,5 +1,7 @@
 package tn.softsys.buanderie.service.referentiel;
 
+import tn.softsys.buanderie.service.management.ProfilExploitationService;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -25,6 +27,7 @@ public class ChambreLitReferentielService {
 
     private final ChambreRepository chambreRepository;
     private final LitRepository litRepository;
+    private final ProfilExploitationService profilExploitationService;
 
     @Transactional(readOnly = true)
     public List<ChambreDto> getChambres() {
@@ -83,6 +86,9 @@ public class ChambreLitReferentielService {
 
     @Transactional(readOnly = true)
     public List<LitInfecteDto> getLitsInfectes() {
+        if (!profilExploitationService.circuitInfecteActif()) {
+            return List.of();
+        }
         return litRepository.findInfectesActifs().stream()
                 .map(lit -> LitInfecteDto.builder()
                         .id(CleReferentiel.cle(lit))
@@ -132,7 +138,7 @@ public class ChambreLitReferentielService {
                 .code(lit.getCode())
                 .description(lit.getDescription())
                 .chambreId(CleReferentiel.cle(lit.getChambre()))
-                .infecte(Boolean.TRUE.equals(lit.getInfecte()))
+                .infecte(profilExploitationService.circuitInfecteActif() && Boolean.TRUE.equals(lit.getInfecte()))
                 .build();
     }
 }

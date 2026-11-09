@@ -11,8 +11,8 @@ import tn.softsys.buanderie.dto.SacsInfectes.SacInfecteDTO;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
 import tn.softsys.buanderie.exception.BusinessException;
-import tn.softsys.buanderie.exception.ResourceNotFoundException;
 import tn.softsys.buanderie.repository.*;
+import tn.softsys.buanderie.service.management.ProfilExploitationService;
 import tn.softsys.buanderie.service.management.SacInfecteService;
 
 import java.time.LocalDateTime;
@@ -33,6 +33,7 @@ public class ReceptionService {
     private final HistoriqueLingeRepository historiqueLingeRepository;
     private final ServiceRepository serviceRepository;
     private final SacInfecteService sacInfecteService;
+    private final ProfilExploitationService profilExploitationService;
     private final PersonnelRepository sqlPersonnelRepo;
 
 
@@ -44,9 +45,6 @@ public class ReceptionService {
 
 
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(code);
-        if (agent == null) {
-            throw new ResourceNotFoundException("Agent", "matricule", code);
-        }
         List<ReceptionBac> bacsRecus = new ArrayList<>();
         List<SacInfecteDTO> sacsRecus = new ArrayList<>();
         //  Réception des bacs blancs
@@ -54,6 +52,9 @@ public class ReceptionService {
             for (String codeBac : request.getCodesBac()) {
                 Bac bac = bacRepository.findByCode(codeBac)
                         .orElseThrow(() -> new RuntimeException("Bac introuvable : " + codeBac));
+                if (bac.getTypebac() == TypeBac.INFECTE) {
+                    profilExploitationService.exigerCircuitInfecte();
+                }
                 bac.setEtat(EtatBac.EN_RECEPTION);
                 bac.setPoids(null);
                 bacRepository.save(bac);
@@ -94,6 +95,7 @@ public class ReceptionService {
         }
         //Réception des sacs infectés (sans ouverture)
         if (request.getNumerosSacsInfectes() != null && !request.getNumerosSacsInfectes().isEmpty()) {
+            profilExploitationService.exigerCircuitInfecte();
 
             for (String numeroSac : request.getNumerosSacsInfectes()) {
                 SacInfecteDTO sacDTO = sacInfecteService.recevoirSacInfecte(numeroSac, agent.getCodeBarre());
@@ -107,9 +109,6 @@ public class ReceptionService {
     @Transactional
     public ReceptionRFIDResultDTO recevoirRFID(ReceptionRFIDRequest request, String code) {
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(code);
-        if (agent == null) {
-            throw new ResourceNotFoundException("Agent", "matricule", code);
-        }
 
         Bac bac = bacRepository.findByCode(request.getCodeBac())
                 .orElseThrow(() -> new RuntimeException("Bac introuvable"));
@@ -252,6 +251,9 @@ public class ReceptionService {
         }
 
         boolean estInfecte = Boolean.TRUE.equals(infecte) || linge.getEtat() == EtatLinge.INFECTE_COLLECTE;
+        if (estInfecte) {
+            profilExploitationService.exigerCircuitInfecte();
+        }
 
         EtatLinge etatAvant = linge.getEtat();
         linge.setEtat(EtatLinge.RECEPTION);

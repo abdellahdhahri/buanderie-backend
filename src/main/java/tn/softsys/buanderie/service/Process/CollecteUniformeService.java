@@ -1,5 +1,7 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.service.management.ProfilExploitationService;
+
 import tn.softsys.buanderie.repository.PersonnelRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,7 @@ import java.util.stream.Collectors;
 @Transactional
 public class CollecteUniformeService {
 
+    private final ProfilExploitationService profilExploitationService;
     private final LingeRepository lingeRepo;
     private final AgentRepository agentRepo;
     private final BacRepository bacRepo;
@@ -57,7 +60,8 @@ public class CollecteUniformeService {
         Long fonctionId = p.getFonctionId();
 
         boolean estInfecte =
-                fonctionId != null &&
+                profilExploitationService.circuitInfecteActif() &&
+                        fonctionId != null &&
                         Set.of(59L, 56L, 41L, 20L).contains(fonctionId);
 
 
@@ -189,6 +193,9 @@ public class CollecteUniformeService {
         if (done(collecteId, l.getId())) throw new BusinessException("Déjà traité.");
         Bac bac = bacRepo.findByCode(codeBac).or(() -> bacRepo.findByRfidTag(codeBac)).orElseThrow(() -> new BusinessException("Bac introuvable : " + codeBac));
         boolean inf = bac.getTypebac() == TypeBac.INFECTE;
+        if (inf) {
+            profilExploitationService.exigerCircuitInfecte();
+        }
         EtatLinge ne = inf ? EtatLinge.INFECTE_COLLECTE : EtatLinge.COLLECTE;
         StatutCollecteLinge st = inf ? StatutCollecteLinge.INFECTE_PRESUME : StatutCollecteLinge.BLANC;
         TypeCollecte tc = inf ? TypeCollecte.INFECTE : TypeCollecte.BLANC;
@@ -201,7 +208,7 @@ public class CollecteUniformeService {
         lingeRepo.save(l);
         collecteLingeRepo.save(CollecteLinge.builder().collecte(c).linge(l).typeCollecte(tc).numeroSacInfecte(inf ? bac.getCode() : null).dateScan(LocalDateTime.now()).build());
         historiqueRepo.save(HistoriqueLinge.builder().linge(l).etatAvant(av).etatApres(ne)
-                //   agent(c.getAgent())
+                .personnelId(c.getPersonnelId())
                 .typeOperation(inf ? TypeOperation.DECLARATION_SAC_INFECTE : TypeOperation.COLLECTE).dateOperation(LocalDateTime.now()).collecte(c).observations((inf ? "INFECTE" : "BLANC") + " uniforme=" + codeUniforme + " bac=" + bac.getCode()).build());
         return Map.of("lingeId", l.getId(), "codeBarre", l.getCodeBarre(), "categorie", l.getCategorie().name(), "statut", inf ? "INFECTE" : "BLANC", "bac", bac.getCode());
     }
@@ -215,7 +222,7 @@ public class CollecteUniformeService {
         lingeRepo.save(l);
         collecteLingeRepo.save(CollecteLinge.builder().collecte(c).linge(l).typeCollecte(TypeCollecte.MANQUANT).dateScan(LocalDateTime.now()).build());
         historiqueRepo.save(HistoriqueLinge.builder().linge(l).etatAvant(av).etatApres(EtatLinge.MANQUANT)
-                // .agent(c.getAgent())
+                .personnelId(c.getPersonnelId())
                 .typeOperation(TypeOperation.CHANGEMENT_ETAT_LINGE).dateOperation(LocalDateTime.now()).collecte(c).observations("Uniforme manquant").build());
         return Map.of("lingeId", lingeId, "statut", "MANQUANT");
     }

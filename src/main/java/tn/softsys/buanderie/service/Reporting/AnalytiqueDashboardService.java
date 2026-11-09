@@ -11,6 +11,7 @@ import tn.softsys.buanderie.entity.enums.*;
 import tn.softsys.buanderie.repository.*;
 import tn.softsys.buanderie.service.management.OperationsEtape;
 import tn.softsys.buanderie.service.management.ParcoursService;
+import tn.softsys.buanderie.service.management.ProfilExploitationService;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -33,6 +34,7 @@ public class AnalytiqueDashboardService {
     private final ServiceRepository sqlServiceRepo;
     private final NotificationService notificationService;
     private final ParcoursService parcoursService;
+    private final ProfilExploitationService profilExploitationService;
 
     private static final int    SEUIL_CRITIQUE  = 3;
     private static final int    SEUIL_ATTENTION = 8;
@@ -120,9 +122,10 @@ public class AnalytiqueDashboardService {
         r.put("collectesAujourdhui",     collectesJ);
         r.put("lavagesAujourdhui",       lavagesJ);
         r.put("tauxOccupationMachines",  tauxMachines);
-        r.put("sacsInfectesEnAttente",   sacsAtt);
+        r.put("sacsInfectesEnAttente",   profilExploitationService.circuitInfecteActif() ? sacsAtt : 0L);
+        r.put("circuitInfecteActif",     profilExploitationService.circuitInfecteActif());
         r.put("lingesProcheFin",         procheFin);
-        r.put("tauxInfectionMois",       tauxInf);
+        r.put("tauxInfectionMois",       profilExploitationService.circuitInfecteActif() ? tauxInf : 0.0);
         return r;
     }
 
@@ -286,19 +289,21 @@ public class AnalytiqueDashboardService {
                 .collect(Collectors.toList());
 
         //  Sacs en attente
-        List<Map<String, Object>> alertesSacs = sacInfecteRepo.findAll().stream()
-                .filter(s -> (s.getEtat() == EtatSac.DECLARE
-                        || s.getEtat() == EtatSac.RECEPTIONNE)
-                        && s.getDateCollecte() != null
-                        && s.getDateCollecte().isBefore(
-                        LocalDateTime.now().minusHours(HEURES_SAC)))
-                .map(s -> alerteMap(
-                        "SAC_ATTENTE", "CRITICAL",
-                        "Sac infecté en attente depuis +" + HEURES_SAC + "h",
-                        s.getNumeroSac(),
-                        "État : " + s.getEtat().name()
-                                + " — " + s.getQuantiteDeclaree() + " linge(s)"))
-                .collect(Collectors.toList());
+        List<Map<String, Object>> alertesSacs = !profilExploitationService.circuitInfecteActif()
+                ? List.<Map<String, Object>>of()
+                : sacInfecteRepo.findAll().stream()
+                  .filter(s -> (s.getEtat() == EtatSac.DECLARE
+                                || s.getEtat() == EtatSac.RECEPTIONNE)
+                               && s.getDateCollecte() != null
+                               && s.getDateCollecte().isBefore(
+                          LocalDateTime.now().minusHours(HEURES_SAC)))
+                  .map(s -> alerteMap(
+                          "SAC_ATTENTE", "CRITICAL",
+                          "Sac infecté en attente depuis +" + HEURES_SAC + "h",
+                          s.getNumeroSac(),
+                          "État : " + s.getEtat().name()
+                          + " — " + s.getQuantiteDeclaree() + " linge(s)"))
+                  .collect(Collectors.toList());
 
         int total = alertesStock.size() + alertesBloquees.size()
                 + alertesFinVie.size() + alertesSacs.size();

@@ -1,5 +1,7 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.service.management.ProfilExploitationService;
+
 import tn.softsys.buanderie.repository.ServiceRepository;
 import tn.softsys.buanderie.entity.ServiceEntity;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -37,6 +39,7 @@ public class CollecteServiceService {
     private final HistoriqueLingeRepository      historiqueRepo;
     private final SacInfecteRepository           sacInfecteRepo;
     private final SacInfecteService              sacInfecteService;
+    private final ProfilExploitationService profilExploitationService;
     private final PersonnelRepository personnelReo;
     private final ObjectMapper objectMapper;
 
@@ -46,10 +49,13 @@ public class CollecteServiceService {
             Long serviceId,
             String refOuCode) {
 
-        Personnel personnel = personnelReo.findByCodeBarre(matriculeAgent);
-        if (personnel == null) {
-            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
-        }
+        Personnel personnel = personnelReo
+                .findByCodeBarre(matriculeAgent);
+//                .orElseThrow(() ->
+//                        new BusinessException(
+//                                "Agent introuvable : " + matriculeAgent
+//                        )
+//                );
 
         Optional<ServiceEntity> svc = resolveService(serviceId, refOuCode);
 
@@ -212,7 +218,7 @@ public class CollecteServiceService {
 
         historiqueRepo.save(HistoriqueLinge.builder()
                 .linge(l).etatAvant(ancien).etatApres(EtatLinge.COLLECTE)
-                // .agent(c.getAgent())
+                .personnelId(c.getPersonnelId())
                 .typeOperation(TypeOperation.COLLECTE)
                 .dateOperation(LocalDateTime.now()).collecte(c)
                 .observations("BLANC bac=" + bac.getCode()
@@ -235,6 +241,8 @@ public class CollecteServiceService {
     public SacInfecteDTO declarerSacInfecte(
             Long collecteId,
             SacInfecteRequest request) {
+        profilExploitationService.exigerCircuitInfecte();
+
 
         /*
          * IMPORTANT :
@@ -416,7 +424,7 @@ public class CollecteServiceService {
                 .build());
         historiqueRepo.save(HistoriqueLinge.builder()
                 .linge(l).etatAvant(ancien).etatApres(EtatLinge.MANQUANT)
-                //.agent(c.getAgent())
+                .personnelId(c.getPersonnelId())
                 .typeOperation(TypeOperation.CHANGEMENT_ETAT_LINGE)
                 .dateOperation(LocalDateTime.now()).collecte(c)
                 .observations("Manquant svcId=" + c.getService())
