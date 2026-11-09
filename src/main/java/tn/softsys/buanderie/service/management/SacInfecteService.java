@@ -47,10 +47,12 @@ public class SacInfecteService {
     private final PersonnelRepository personnelRepository;
 
     private final PersonnelRepository sqlPersonnelRepo;
+    private final ProfilExploitationService profilExploitationService;
 
 
 
     public SacInfecte creerSac(SacInfecteDTO sacInfecteDTO){
+        profilExploitationService.exigerCircuitInfecte();
        /* if (sacInfecteRepository.existBynumero_sac(sacInfecteDTO.getNumeroSac())){
             throw new BusinessException("sac avec ce numero deja existe '"+ sacInfecteDTO.getNumeroSac());
         }*/
@@ -69,6 +71,7 @@ public class SacInfecteService {
     }
     //  DECLARATION appelé depuis CollecteService avec la collecte parente
     public SacInfecteDTO declarerSacInfecte(SacInfecteRequest request, Collecte collecte) {
+        profilExploitationService.exigerCircuitInfecte();
 
         if (request.getItems() == null || request.getItems().isEmpty())
             throw new BusinessException("Impossible de déclarer un sac vide.");
@@ -112,10 +115,12 @@ public class SacInfecteService {
     }
     // Appelé directement depuis le controller (sans collecte parente)
     public SacInfecteDTO declarerSacInfecte(SacInfecteRequest request) {
+        profilExploitationService.exigerCircuitInfecte();
         return declarerSacInfecte(request, null);
     }
     //  RÉCEPTION
     public SacInfecteDTO recevoirSacInfecte(String numeroSac, String matriculeAgent) {
+        profilExploitationService.exigerCircuitInfecte();
         SacInfecte sac = sacInfecteRepository.findByNumeroSac(numeroSac)
                 .orElseThrow(() -> new ResourceNotFoundException("SacInfecte", "numeroSac", numeroSac));
         if (sac.getEtat() != EtatSac.DECLARE)
@@ -139,6 +144,7 @@ public class SacInfecteService {
             String numeroSac,
             String matriculeAgent,
             String codeMachine) {
+        profilExploitationService.exigerCircuitInfecte();
 
         SacInfecte sac = sacInfecteRepository.findByNumeroSac(numeroSac)
                 .orElseThrow(() ->
@@ -180,6 +186,7 @@ public class SacInfecteService {
 
     //  VÉRIFICATION POST-LAVAGE
     public SacInfecteDTO verifierApresLavage(VerificationLavageRequest request) {
+        profilExploitationService.exigerCircuitInfecte();
         SacInfecte sac = sacInfecteRepository.findByNumeroSac(request.getNumeroSac())
                 .orElseThrow(() -> new ResourceNotFoundException("SacInfecte", "numeroSac", request.getNumeroSac()));
         if (sac.getEtat() != EtatSac.EN_LAVAGE)
@@ -260,6 +267,7 @@ public class SacInfecteService {
 
     //  SCAN LINGES PROPRES => RÉINTÉGRATION FLUX NORMAL
     public SacInfecteDTO affecterLingesPropres(AffectationLingesPropresRequest request) {
+        profilExploitationService.exigerCircuitInfecte();
         SacInfecte sac = sacInfecteRepository.findByNumeroSac(request.getNumeroSac())
                 .orElseThrow(() -> new ResourceNotFoundException("SacInfecte", "numeroSac", request.getNumeroSac()));
 
@@ -270,9 +278,7 @@ public class SacInfecteService {
             throw new BusinessException("Aucun code-barre fourni.");
 
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
-        if (agent == null) {
-            throw new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent());
-        }
+//                .orElseThrow(() -> new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent()));
 
         Collecte collecte = sac.getCollecte();
 
@@ -425,6 +431,7 @@ public class SacInfecteService {
     public void ajouterLingeAuSac(
             SacInfecte sac,
             Linge linge) {
+        profilExploitationService.exigerCircuitInfecte();
 
         SacInfecteItem item =
                 sacInfecteItemRepository

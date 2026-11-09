@@ -25,6 +25,7 @@ import tn.softsys.buanderie.service.referentiel.IntegrationService;
 @RequiredArgsConstructor
 public class LitService {
 
+    private final ProfilExploitationService profilExploitationService;
     private final LitRepository litRepository;
     private final ChambreRepository chambreRepository;
     private final LingeRepository lingeRepository;
@@ -66,6 +67,9 @@ public class LitService {
 
     @Transactional(readOnly = true)
     public List<LitDetailDTO> listerInfectes() {
+        if (!profilExploitationService.circuitInfecteActif()) {
+            return List.of();
+        }
         return litRepository.findInfectesActifs().stream().map(LitDetailDTO::depuis).toList();
     }
 
@@ -148,6 +152,9 @@ public class LitService {
     public LitDetailDTO definirInfection(Long id, Boolean infecte) {
         if (infecte == null) {
             throw new BusinessException("L'état d'infection est obligatoire.");
+        }
+        if (infecte) {
+            profilExploitationService.exigerCircuitInfecte();
         }
         if (integrationService.estImporte(Referentiel.LIT_INFECTE)) {
             throw new BusinessException(

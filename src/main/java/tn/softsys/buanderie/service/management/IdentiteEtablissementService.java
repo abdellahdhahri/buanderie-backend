@@ -25,6 +25,7 @@ public class IdentiteEtablissementService {
 
     private final IdentiteEtablissementRepository identiteRepository;
     private final LogoEtablissementRepository logoRepository;
+    private final ProfilExploitationService profilExploitationService;
 
     @Transactional
     public IdentiteResponse lire() {
@@ -34,6 +35,7 @@ public class IdentiteEtablissementService {
     @Transactional
     public IdentiteResponse modifier(IdentiteRequest request) {
         IdentiteEtablissement identite = getOuCreer();
+        boolean circuitAvant = profilExploitationService.valeurEffective(identite);
 
         if (request.getNomApplication() != null) {
             String nom = request.getNomApplication().trim();
@@ -72,8 +74,17 @@ public class IdentiteEtablissementService {
             identite.setPiedDePage(vide(limiter(request.getPiedDePage().trim(), 500, "Le pied de page")));
         }
 
+        if (request.getCircuitInfecteActif() != null) {
+            identite.setCircuitInfecteActif(request.getCircuitInfecteActif());
+        }
+        if (circuitAvant && !profilExploitationService.valeurEffective(identite)) {
+            profilExploitationService.verifierDesactivationPossible();
+        }
+
         identite.setDateModification(LocalDateTime.now());
-        return versReponse(identiteRepository.save(identite));
+        IdentiteEtablissement enregistree = identiteRepository.save(identite);
+        profilExploitationService.invalider();
+        return versReponse(enregistree);
     }
 
     @Transactional
@@ -152,6 +163,7 @@ public class IdentiteEtablissementService {
                 .raisonSociale(identite.getRaisonSociale())
                 .nomApplication(identite.getNomApplication())
                 .typeEtablissement(identite.getTypeEtablissement())
+                .circuitInfecteActif(profilExploitationService.valeurEffective(identite))
                 .couleurPrimaire(identite.getCouleurPrimaire())
                 .adresse(identite.getAdresse())
                 .telephone(identite.getTelephone())

@@ -1,5 +1,7 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.service.management.ProfilExploitationService;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,7 +16,6 @@ import tn.softsys.buanderie.exception.BusinessException;
 import tn.softsys.buanderie.exception.ResourceNotFoundException;
 import tn.softsys.buanderie.repository.*;
 import tn.softsys.buanderie.service.Reporting.NotificationService;
-import tn.softsys.buanderie.service.management.ParcoursService;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -34,9 +35,9 @@ public class CycleLavageService {
     private final HistoriqueLingeRepository historiqueLingeRepository;
     private final NotificationService notificationService;
     private final SacInfecteRepository sacInfecteRepository;
+    private final ProfilExploitationService profilExploitationService;
     private final PersonnelReferentielService personnelReferentielService;
     private final PersonnelRepository sqlPersonnelRepo;
-    private final ParcoursService parcoursService;
 
 
     public LotScanResponse scanLot(String codeLot) {
@@ -72,9 +73,7 @@ public class CycleLavageService {
                                   String matriculeAgent,
                                   Double poidsCharge) {
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
-        if (agent == null) {
-            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
-        }
+//                .orElseThrow(() -> new ResourceNotFoundException("AGENT", "matriculeAgent", matriculeAgent));
 
 
         Machine machine = machineRepo.findByCode(codeMachine);
@@ -119,11 +118,8 @@ public class CycleLavageService {
         for (Linge linge : linges) {
             EtatLinge ancienEtat = linge.getEtat();
             linge.setEtat(EtatLinge.EN_LAVAGE);
-            // La durée de vie n'est plus décrémentée ici : nbLavage est déjà
-            // incrémenté à la fin du cycle (finishCycle). Ce lavage sera le
-            // (nbLavage + 1)-ième : on notifie si la durée de vie est atteinte.
-            if (linge.getDureVie() != null
-                    && linge.getNbLavage() + 1 >= linge.getDureVie()) {
+            linge.setDureVie(linge.getDureVie()-1);
+            if (linge.getNbLavage() >= linge.getDureVie()) {
 
                 notificationService.notifierFinDeVie(linge);
 
@@ -248,20 +244,14 @@ public class CycleLavageService {
 
                 lingeRepository.saveAll(linges);
 
-                if (parcoursService.estActive(CodeEtape.SECHAGE)) {
-                    lot.setEtat(EtatLot.PRET_SECHAGE);
-                } else {
-                    for (Linge linge : linges) {
-                        linge.setLot(null);
-                    }
-                    lingeRepository.saveAll(linges);
-                    lot.setPoidsActuel(0.0);
-                    lot.setEtat(EtatLot.EN_TRI);
-                }
+
+                lot.setEtat(EtatLot.PRET_SECHAGE);
                 lotRepo.save(lot);
             }
 
-
+            // =====================================================
+            //  LAVAGE INFECTÉ : SOURCE = SAC_INFECTE
+            // =====================================================
             else if (item.getTypeSource() == TypeSource.SAC_INFECTE) {
 
                 SacInfecte sac = sacInfecteRepository
@@ -369,13 +359,22 @@ public class CycleLavageService {
         return result;
     }
 
+
+
+
+    //===========================================================//
+
+
     @Transactional
     public CycleLavage startCycleSacInfecte(
             String codeMachine,
             String numeroSac,
             String matriculeAgent) {
+        profilExploitationService.exigerCircuitInfecte();
 
 
+        // Agent
+        // Agent agent = agentRepository.findByMatricule(matriculeAgent)
         PersonnelDto agent = personnelReferentielService.getByCode(matriculeAgent);
 
 //                .orElseThrow(() ->
@@ -430,6 +429,7 @@ public class CycleLavageService {
                                                 "est introuvable."
                                 ));
 
+        // Création du cycle
         CycleLavage cycle = CycleLavage.builder()
                 .machine(machine)
                 //.agent(agent)

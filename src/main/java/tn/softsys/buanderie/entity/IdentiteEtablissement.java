@@ -39,6 +39,9 @@ public class IdentiteEtablissement {
     @Column(name = "type_etablissement", length = 20)
     private TypeEtablissement typeEtablissement;
 
+    @Column(name = "circuit_infecte_actif")
+    private Boolean circuitInfecteActif;
+
     @Column(name = "couleur_primaire", length = 7)
     private String couleurPrimaire;
 

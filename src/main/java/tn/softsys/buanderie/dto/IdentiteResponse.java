@@ -17,6 +17,7 @@ public class IdentiteResponse {
     private String raisonSociale;
     private String nomApplication;
     private TypeEtablissement typeEtablissement;
+    private Boolean circuitInfecteActif;
     private String couleurPrimaire;
     private String adresse;
     private String telephone;
