@@ -1,5 +1,11 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.entity.enums.NiveauRattachement;
+
+import tn.softsys.buanderie.service.referentiel.ChambreLitReferentielService;
+
+import tn.softsys.buanderie.dto.ChambreDto;
+
 import tn.softsys.buanderie.service.management.ProfilExploitationService;
 
 import tn.softsys.buanderie.repository.ServiceRepository;
@@ -42,6 +48,7 @@ public class CollecteServiceService {
     private final ProfilExploitationService profilExploitationService;
     private final PersonnelRepository personnelReo;
     private final ObjectMapper objectMapper;
+    private final ChambreLitReferentielService chambreLitService;
 
     @Transactional
     public Map<String, Object> ouvrirService(
@@ -155,6 +162,92 @@ public class CollecteServiceService {
     }
 
 
+    @Transactional
+    public Map<String, Object> ouvrirChambre(String matriculeAgent, String codeChambre) {
+        profilExploitationService.exigerNiveau(NiveauRattachement.CHAMBRE);
+
+        Personnel personnel = matriculeAgent == null || matriculeAgent.isBlank()
+                ? null
+                : personnelReo.findByCodeBarre(matriculeAgent.trim());
+        if (personnel == null) {
+            throw new BusinessException("Agent introuvable : " + matriculeAgent);
+        }
+
+        ChambreDto chambre = chambreLitService.getChambreByCodeBarre(codeChambre);
+        if (chambre == null) {
+            throw new BusinessException("Chambre introuvable : " + codeChambre);
+        }
+
+        List<Linge> attendus = lingeRepo.findByChambreIdSqlServerAndEtat(chambre.getId(), EtatLinge.LIVRE);
+        if (attendus.isEmpty()) {
+            throw new BusinessException("Aucun linge livré à collecter pour cette chambre");
+        }
+
+        Map<CategLinge, Integer> attendusParCategorie =
+                attendus.stream()
+                        .collect(Collectors.groupingBy(
+                                Linge::getCategorie,
+                                () -> new EnumMap<>(CategLinge.class),
+                                Collectors.summingInt(l -> 1)
+                        ));
+
+        String quantitesAttendues;
+        try {
+            quantitesAttendues = objectMapper.writeValueAsString(attendusParCategorie);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException("Impossible de créer le snapshot des quantités attendues");
+        }
+
+        attendus.forEach(l -> {
+            if (l.getStatutCollecte() == StatutCollecteLinge.PROPRE) {
+                l.setStatutCollecte(null);
+            }
+        });
+        lingeRepo.saveAll(attendus);
+
+        Collecte collecte = Collecte.builder()
+                .personnelId(personnel.getId())
+                .service(chambre.getServiceId())
+                .chambreIdSqlServer(chambre.getId())
+                .codeChambre(chambre.getCode())
+                .typeCollecte(TypeCollecte.MIXTE)
+                .etatCollecte(EtatCollecte.EN_TRAITEMENT)
+                .dateDebut(LocalDateTime.now())
+                .nbAttendus(attendus.size())
+                .nbScannésBlanc(0)
+                .nbPropres(0)
+                .nbInfectésPrésumés(0)
+                .nbManquants(0)
+                .quantitesAttendues(quantitesAttendues)
+                .numeroCollecte(genererNumeroCollecte())
+                .build();
+        collecte = collecteRepo.save(collecte);
+
+        List<Map<String, Object>> lignes =
+                attendus.stream()
+                        .map(l -> {
+                            Map<String, Object> row = new HashMap<>();
+                            row.put("id", l.getId());
+                            row.put("codeBarre", l.getCodeBarre());
+                            row.put("rfidTag", l.getRfidTag());
+                            row.put("categorie", l.getCategorie());
+                            row.put("statut", null);
+                            return row;
+                        })
+                        .toList();
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("collecteId", collecte.getId());
+        response.put("numeroCollecte", collecte.getNumeroCollecte());
+        response.put("chambreId", chambre.getId());
+        response.put("codeChambre", chambre.getCode());
+        response.put("serviceId", chambre.getServiceId());
+        response.put("nbAttendus", collecte.getNbAttendus());
+        response.put("attendusParCategorie", attendusParCategorie);
+        response.put("linges", lignes);
+        return response;
+    }
+
     //  SCAN BAC — identifie le bac (blanc ou rouge) + vérifie capacité
     public Map<String, Object> scanBac(Long collecteId, String codeOuTag) {
         findC(collecteId); // vérifier que la collecte existe
@@ -206,6 +299,10 @@ public class CollecteServiceService {
         l.setEtat(EtatLinge.COLLECTE);
         l.setStatutCollecte(StatutCollecteLinge.BLANC);
         l.setTypeCollecte(TypeCollecte.BLANC);
+        if (c.getChambreIdSqlServer() != null) {
+            l.setChambreIdSqlServer(null);
+            l.setLitIdSqlServer(null);
+        }
 //        l.setServiceId(null);
         lingeRepo.save(l);
 

@@ -1,5 +1,9 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.entity.enums.NiveauRattachement;
+
+import tn.softsys.buanderie.service.management.ProfilExploitationService;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +47,7 @@ public class CollecteChambreService {
 
     private final PersonnelReferentielService personnelService;
     private final ChambreLitReferentielService chambreLitService;
+    private final ProfilExploitationService profilExploitationService;
 
 
 
@@ -51,6 +56,8 @@ public class CollecteChambreService {
     public Map<String, Object> scannerLit(
             Long collecteId,
             Long litId) {
+        profilExploitationService.exigerNiveau(NiveauRattachement.LIT);
+
 
         Collecte collecte = findC(collecteId);
 
@@ -178,6 +185,8 @@ public class CollecteChambreService {
     public Map<String, Object> ouvrirChambre(
             String codeBarre,
             String matriculeAgent) {
+        profilExploitationService.exigerNiveau(NiveauRattachement.LIT);
+
 
         if (codeBarre == null || codeBarre.isBlank()) {
             throw new BusinessException(

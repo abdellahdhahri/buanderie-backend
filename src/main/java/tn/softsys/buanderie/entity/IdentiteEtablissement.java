@@ -1,5 +1,7 @@
 package tn.softsys.buanderie.entity;
 
+import tn.softsys.buanderie.entity.enums.NiveauRattachement;
+
 import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
@@ -41,6 +43,10 @@ public class IdentiteEtablissement {
 
     @Column(name = "circuit_infecte_actif")
     private Boolean circuitInfecteActif;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "niveau_rattachement", length = 10)
+    private NiveauRattachement niveauRattachement;
 
     @Column(name = "couleur_primaire", length = 7)
     private String couleurPrimaire;

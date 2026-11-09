@@ -1,5 +1,9 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.service.management.ProfilExploitationService;
+
+import tn.softsys.buanderie.entity.enums.NiveauRattachement;
+
 import tn.softsys.buanderie.repository.ServiceRepository;
 import tn.softsys.buanderie.entity.ServiceEntity;
 import tn.softsys.buanderie.repository.PersonnelRepository;
@@ -38,6 +42,7 @@ public class DistributionService {
 
     private final ChambreLitReferentielService chambreLitService;
     private final ParcoursService parcoursService;
+    private final ProfilExploitationService profilExploitationService;
     private final ServiceRepository   sqlServiceRepo;
     private final PersonnelRepository sqlPersonnelRepo;
 
@@ -46,9 +51,9 @@ public class DistributionService {
     public Map<String, Object> scanChambrePourDistribution(
             String codeBarre, String matriculeAgent) {
 
-        if (sqlPersonnelRepo.findByCodeBarre(matriculeAgent) == null) {
-            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
-        }
+        sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                        "Agent", "matricule", matriculeAgent));
 
         ChambreDto chambre = chambreLitService.getChambreByCodeBarre(codeBarre);
         if (chambre == null) {
@@ -57,7 +62,11 @@ public class DistributionService {
 
         Set<Long> litsInfectes = chambreLitService.getIdsLitsInfectes();
 
-        List<LitDto> lits = chambreLitService.getLitsByChambre(chambre.getId());
+        boolean parChambre = profilExploitationService.niveauRattachement() == NiveauRattachement.CHAMBRE;
+
+        List<LitDto> lits = parChambre
+                ? List.of()
+                : chambreLitService.getLitsByChambre(chambre.getId());
 
         List<Map<String, Object>> litsDto = lits.stream().map(lit -> {
             List<Linge> poses = lingeRepo
@@ -82,9 +91,19 @@ public class DistributionService {
                         || l.getChambreIdSqlServer().equals(chambre.getId()))
                 .collect(Collectors.toList());
 
+        List<Map<String, Object>> dansChambre = lingeRepo
+                .findByChambreIdSqlServerAndEtat(chambre.getId(), EtatLinge.LIVRE).stream()
+                .map(l -> Map.<String, Object>of(
+                        "lingeId",   l.getId(),
+                        "codeBarre", l.getCodeBarre(),
+                        "categorie", l.getCategorie().name()))
+                .collect(Collectors.toList());
+
         return Map.of(
                 "chambreId",   chambre.getId(),
                 "codeChambre", chambre.getCode(),
+                "niveauRattachement", parChambre ? "CHAMBRE" : "LIT",
+                "lingesDansChambre", dansChambre,
                 "nbLits",      lits.size(),
                 "lits",        litsDto,
                 "disponibles", disponibles.stream().map(l -> Map.<String, Object>of(
@@ -100,10 +119,11 @@ public class DistributionService {
                                                 Long litId,
                                                 String codeOuTag,
                                                 String matriculeAgent) {
+        profilExploitationService.exigerNiveau(NiveauRattachement.LIT);
+
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
-        if (agent == null) {
-            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
-        }
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                        "Agent", "matricule", matriculeAgent));
 
         Linge linge = findLinge(codeOuTag);
 
@@ -200,9 +220,8 @@ public class DistributionService {
                                                    String codeOuTag,
                                                    String matriculeAgent) {
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
-        if (agent == null) {
-            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
-        }
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                        "Agent", "matricule", matriculeAgent));
 
         Linge linge = findLinge(codeOuTag);
 
@@ -245,9 +264,9 @@ public class DistributionService {
 
     public Map<String, Object> getUniformesPourPersonnel(String codeBadge,
                                                          String matriculeAgent) {
-        if (sqlPersonnelRepo.findByCodeBarre(matriculeAgent) == null) {
-            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
-        }
+        sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                        "Agent", "matricule", matriculeAgent));
 
         Personnel p = sqlPersonnelRepo.findByCodeBarre(codeBadge);
         if (p == null)
@@ -286,9 +305,8 @@ public class DistributionService {
                                                   String codeOuTag,
                                                   String matriculeAgent) {
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
-        if (agent == null) {
-            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
-        }
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                        "Agent", "matricule", matriculeAgent));
 
         Linge linge = findLinge(codeOuTag);
 
@@ -332,9 +350,8 @@ public class DistributionService {
     @Transactional
     public Distribution creerDistribution(DistributionRequest request) {
         Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
-        if (agent == null) {
-            throw new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent());
-        }
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                        "Agent", "matricule", request.getMatriculeAgent()));
 
         ServiceEntity service =
                 sqlServiceRepo.findById(request.getServiceId())
@@ -461,6 +478,64 @@ public class DistributionService {
     }
 
 
+
+    public Map<String, Object> distribuerSurChambre(Long chambreId,
+                                                    String codeOuTag,
+                                                    String matriculeAgent) {
+        profilExploitationService.exigerNiveau(NiveauRattachement.CHAMBRE);
+
+        Personnel agent = matriculeAgent == null || matriculeAgent.isBlank()
+                ? null
+                : sqlPersonnelRepo.findByCodeBarre(matriculeAgent.trim());
+        if (agent == null) {
+            throw new BusinessException("Agent introuvable : " + matriculeAgent);
+        }
+
+        Linge linge = findLinge(codeOuTag);
+
+        if (!etatsDisponibles().contains(linge.getEtat())) {
+            throw new BusinessException(
+                    "Linge non disponible — état : " + linge.getEtat()
+                            + " (attendu : " + libelleEtatsDisponibles() + ")");
+        }
+
+        ChambreDto chambre = chambreLitService.findChambreById(chambreId)
+                .orElseThrow(() -> new BusinessException("Chambre introuvable : " + chambreId));
+        Long serviceId = chambre.getServiceId();
+
+        EtatLinge ancien = linge.getEtat();
+
+        linge.setLitIdSqlServer(null);
+        linge.setChambreIdSqlServer(chambreId);
+        linge.setServiceId(serviceId);
+        linge.setPorteurId(null);
+        linge.setPorteurNom(null);
+        linge.setEtat(EtatLinge.LIVRE);
+        linge.setStatutCollecte(null);
+        linge.setArsenalEmplacementID(null);
+        linge.setEmplacement(null);
+
+        lingeRepo.save(linge);
+
+        historiqueRepo.save(HistoriqueLinge.builder()
+                .linge(linge)
+                .etatAvant(ancien)
+                .etatApres(EtatLinge.LIVRE)
+                .personnelId(agent.getId())
+                .typeOperation(TypeOperation.LIVRAISON)
+                .dateOperation(LocalDateTime.now())
+                .observations("Distribué → chambre=" + chambreId + " service=" + serviceId)
+                .build());
+
+        return Map.of(
+                "lingeId",   linge.getId(),
+                "codeBarre", linge.getCodeBarre(),
+                "categorie", linge.getCategorie().name(),
+                "chambreId", chambreId,
+                "serviceId", serviceId != null ? serviceId : 0L,
+                "statut",    "LIVRE"
+        );
+    }
 
     private Set<EtatLinge> etatsDisponibles() {
         Set<EtatLinge> etats = parcoursService.etatsAcceptes(CodeEtape.DISTRIBUTION);

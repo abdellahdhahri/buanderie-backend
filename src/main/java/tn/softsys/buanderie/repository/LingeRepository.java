@@ -43,6 +43,12 @@ public interface LingeRepository extends JpaRepository<Linge, Long>, JpaSpecific
     // ── Collecte service : linges LIVRE d'un service ────────────────────────
     List<Linge> findByServiceIdAndEtat(Long serviceId, EtatLinge etat);
 
+    List<Linge> findByChambreIdSqlServerAndEtat(Long chambreIdSqlServer, EtatLinge etat);
+
+    long countByEtatAndLitIdSqlServerIsNotNull(EtatLinge etat);
+
+    long countByEtatAndChambreIdSqlServerIsNotNullAndLitIdSqlServerIsNull(EtatLinge etat);
+
     // ── Collecte uniforme : linges LIVRE d'un porteur ───────────────────────
     List<Linge> findByPorteurIdAndEtat(Long porteurId, EtatLinge etat);
 

@@ -25,6 +25,13 @@ public class CollecteServiceController {
                 service.ouvrirService(matriculeAgent, serviceId, refOuCode));
     }
 
+    @PostMapping("/chambre/ouvrir")
+    public ResponseEntity<Map<String, Object>> ouvrirChambre(
+            @RequestParam String matriculeAgent,
+            @RequestParam String codeChambre) {
+        return ResponseEntity.ok(service.ouvrirChambre(matriculeAgent, codeChambre));
+    }
+
     @PostMapping("/{id}/bac")
     public ResponseEntity<Map<String, Object>> scanBac(
             @PathVariable Long id,

@@ -1,5 +1,7 @@
 package tn.softsys.buanderie.service.management;
 
+import tn.softsys.buanderie.entity.enums.NiveauRattachement;
+
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -36,6 +38,7 @@ public class IdentiteEtablissementService {
     public IdentiteResponse modifier(IdentiteRequest request) {
         IdentiteEtablissement identite = getOuCreer();
         boolean circuitAvant = profilExploitationService.valeurEffective(identite);
+        NiveauRattachement niveauAvant = profilExploitationService.niveauEffectif(identite);
 
         if (request.getNomApplication() != null) {
             String nom = request.getNomApplication().trim();
@@ -80,6 +83,12 @@ public class IdentiteEtablissementService {
         if (circuitAvant && !profilExploitationService.valeurEffective(identite)) {
             profilExploitationService.verifierDesactivationPossible();
         }
+
+        if (request.getNiveauRattachement() != null) {
+            identite.setNiveauRattachement(request.getNiveauRattachement());
+        }
+        profilExploitationService.verifierChangementNiveau(
+                niveauAvant, profilExploitationService.niveauEffectif(identite));
 
         identite.setDateModification(LocalDateTime.now());
         IdentiteEtablissement enregistree = identiteRepository.save(identite);
@@ -164,6 +173,7 @@ public class IdentiteEtablissementService {
                 .nomApplication(identite.getNomApplication())
                 .typeEtablissement(identite.getTypeEtablissement())
                 .circuitInfecteActif(profilExploitationService.valeurEffective(identite))
+                .niveauRattachement(profilExploitationService.niveauEffectif(identite))
                 .couleurPrimaire(identite.getCouleurPrimaire())
                 .adresse(identite.getAdresse())
                 .telephone(identite.getTelephone())
