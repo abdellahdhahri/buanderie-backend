@@ -22,4 +22,8 @@ public class LotScanResponse {
     private Integer vitesse;
     private Integer temperature;
     private String description;
+
+    private String origineProgramme;
+    private Boolean programmeParDefaut;
+    private Long programmeId;
 }

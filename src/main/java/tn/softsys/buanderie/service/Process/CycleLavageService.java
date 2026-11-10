@@ -20,6 +20,7 @@ import tn.softsys.buanderie.service.Reporting.NotificationService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -43,25 +44,52 @@ public class CycleLavageService {
     public LotScanResponse scanLot(String codeLot) {
         Lot lot = lotRepo.findByCodeLot(codeLot)
                 .orElseThrow(() -> new ResourceNotFoundException("Lot", "code", codeLot));
-        ProgrammeLavage programme = suggestProgramme(lot.getCategorie());
+        SuggestionProgramme suggestion = resoudreProgramme(lot.getCategorie());
+        ProgrammeLavage programme = suggestion.programme();
         return LotScanResponse.builder()
                 .codeLot(lot.getCodeLot())
                 .categorie(lot.getCategorie())
                 //.poidsRestant(lot.getPoidsRestant())
                 //.quantiteRestante(lot.getQuantiteRestante())
                 .programmeRecommande(programme.getNom())
+                .programmeId(programme.getId())
                 .temperature(programme.getTemperatureCelsius())
                 .description(programme.getDescription())
                 .vitesse(programme.getVitesseEssorageRpm())
                 .duree(programme.getDureeMinutes())
+                .origineProgramme(suggestion.parDefaut() ? "DEFAUT" : "CATEGORIE")
+                .programmeParDefaut(suggestion.parDefaut())
                 .build();
     }
 
+    private record SuggestionProgramme(ProgrammeLavage programme, boolean parDefaut) {}
+
+    /**
+     * Programme de la catégorie dominante du lot ; à défaut, programme par défaut.
+     */
+    private SuggestionProgramme resoudreProgramme(CategLinge categorie) {
+        if (categorie != null) {
+            Optional<ProgrammeLavage> deCategorie =
+                    programmeRepo.findFirstByCategoriesContainingAndTypeOrderByIdAsc(
+                            categorie, TypeProgramme.LAVAGE);
+            if (deCategorie.isPresent()) {
+                return new SuggestionProgramme(deCategorie.get(), false);
+            }
+        }
+
+        ProgrammeLavage parDefaut = programmeRepo
+                .findFirstByParDefautTrueAndTypeOrderByIdAsc(TypeProgramme.LAVAGE)
+                .orElseThrow(() -> new BusinessException(
+                        "Aucun programme de lavage pour la catégorie "
+                                + (categorie != null ? categorie : "(non définie)")
+                                + " et aucun programme par défaut n'est défini. "
+                                + "Définissez un programme de lavage par défaut."));
+
+        return new SuggestionProgramme(parDefaut, true);
+    }
 
     private ProgrammeLavage suggestProgramme(CategLinge categorie) {
-        return programmeRepo.findByCategoriesContaining(categorie)
-                .orElseThrow(() ->
-                        new RuntimeException("Programme introuvable"));
+        return resoudreProgramme(categorie).programme();
     }
 
 
