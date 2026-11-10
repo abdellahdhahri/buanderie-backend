@@ -123,7 +123,6 @@ public class AffectationLitService {
         );
     }
 
-    /** État actuel d'une chambre — combien de linges par lit. */
     public Map<String, Object> getEtatChambre(Long chambreId) {
         List<LitDto> lits = chambreLitService.getLitsByChambre(chambreId);
         List<Map<String,Object>> litsDto = lits.stream().map(lit -> {
