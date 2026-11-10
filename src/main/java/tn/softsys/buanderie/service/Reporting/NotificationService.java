@@ -146,6 +146,44 @@ public class NotificationService {
     }
 
 
+    public void notifierLingesBloques(int total, Map<String, Long> parEtat, List<String> exemples) {
+
+        List<Notification> anciennes =
+                notificationRepository
+                        .findByLueFalseOrderByDateCreationDesc()
+                        .stream()
+                        .filter(n -> "LINGES_BLOQUES".equals(n.getType()))
+                        .collect(Collectors.toList());
+
+        anciennes.forEach(n -> n.setLue(true));
+        notificationRepository.saveAll(anciennes);
+
+        String detail = parEtat.entrySet()
+                .stream()
+                .filter(e -> e.getValue() > 0)
+                .map(e -> ("LIVRE".equals(e.getKey())
+                        ? "livrés non rangés (manquants possibles)"
+                        : e.getKey().toLowerCase().replace('_', ' ')) + " : " + e.getValue())
+                .collect(Collectors.joining(", "));
+
+        String message = total + " linge(s) bloqué(s) dans le circuit (" + detail + ")."
+                + (exemples.isEmpty() ? "" : " Ex. : " + String.join(", ", exemples));
+
+        if (message.length() > 500) {
+            message = message.substring(0, 497) + "...";
+        }
+
+        Notification notification = Notification.builder()
+                .titre("Linges bloqués")
+                .message(message)
+                .type("LINGES_BLOQUES")
+                .dateCreation(LocalDateTime.now())
+                .lue(false)
+                .build();
+
+        envoyer(notification);
+    }
+
     private void envoyer(Notification notification) {
 
         // Sauvegarde en base
