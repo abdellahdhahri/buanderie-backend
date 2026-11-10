@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tn.softsys.buanderie.entity.ProgrammeLavage;
 import tn.softsys.buanderie.entity.ProgrammeSechage;
+import tn.softsys.buanderie.entity.enums.TypeProgramme;
+import tn.softsys.buanderie.exception.BusinessException;
 import tn.softsys.buanderie.exception.ResourceNotFoundException;
 import tn.softsys.buanderie.repository.ProgrammeLavageRepository;
 import tn.softsys.buanderie.repository.ProgrammeSechageRepository;
@@ -39,6 +41,10 @@ public class ProgrammeService {
     public ProgrammeLavage creerLavage(ProgrammeLavage programme) {
         log.info("Création d'un nouveau programme de lavage : {}", programme.getNom());
         validateProgrammeLavage(programme);
+        if (Boolean.TRUE.equals(programme.getParDefaut())) {
+            verifierEligibleParDefaut(programme);
+            retirerAutresParDefaut(null);
+        }
         return lavageRepo.save(programme);
     }
 
@@ -66,7 +72,15 @@ public class ProgrammeService {
             existing.setCategories(data.getCategories());
         }
 
+        if (data.getParDefaut() != null) {
+            existing.setParDefaut(data.getParDefaut());
+        }
+
         validateProgrammeLavage(existing);
+        if (Boolean.TRUE.equals(existing.getParDefaut())) {
+            verifierEligibleParDefaut(existing);
+            retirerAutresParDefaut(existing.getId());
+        }
         return lavageRepo.save(existing);
     }
 
@@ -131,6 +145,23 @@ public class ProgrammeService {
         sechageRepo.delete(programme);
     }
 
+
+    private void verifierEligibleParDefaut(ProgrammeLavage programme) {
+        if (programme.getType() != TypeProgramme.LAVAGE) {
+            throw new BusinessException(
+                    "Seul un programme de type LAVAGE peut être défini par défaut.");
+        }
+    }
+
+    // Un seul programme par défaut : on retire l'indicateur aux autres.
+    private void retirerAutresParDefaut(Long idAConserver) {
+        for (ProgrammeLavage autre : lavageRepo.findByParDefautTrue()) {
+            if (idAConserver == null || !idAConserver.equals(autre.getId())) {
+                autre.setParDefaut(false);
+                lavageRepo.save(autre);
+            }
+        }
+    }
 
     private void validateProgrammeLavage(ProgrammeLavage programme) {
         if (programme.getNom() == null || programme.getNom().trim().isEmpty()) {

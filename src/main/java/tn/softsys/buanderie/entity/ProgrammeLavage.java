@@ -39,6 +39,11 @@ public class ProgrammeLavage {
     private TypeProgramme type;
 
 
+    @Column(name = "par_defaut", columnDefinition = "boolean default false")
+    @Builder.Default
+    private Boolean parDefaut = false;
+
+
     @ElementCollection(targetClass = CategLinge.class)
     @Enumerated(EnumType.STRING)
     @CollectionTable(
