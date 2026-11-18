@@ -27,6 +27,7 @@ public class SynchronisationService {
     private final SynchronisationLitsService synchronisationLitsService;
     private final SynchronisationLitsInfectesService synchronisationLitsInfectesService;
     private final SynchronisationEmplacementsService synchronisationEmplacementsService;
+    private final SynchronisationBacsService synchronisationBacsService;
 
     public JournalSynchronisation synchroniser(Referentiel referentiel, String declencheur) {
         return switch (referentiel) {
@@ -39,6 +40,7 @@ public class SynchronisationService {
             case LIT -> synchronisationLitsService.synchroniser(declencheur);
             case LIT_INFECTE -> synchronisationLitsInfectesService.synchroniser(declencheur);
             case EMPLACEMENT -> synchronisationEmplacementsService.synchroniser(declencheur);
+            case BAC -> synchronisationBacsService.synchroniser(declencheur);
             default -> throw new BusinessException(
                     "La synchronisation de " + referentiel + " n'est pas encore disponible.");
         };
@@ -71,6 +73,7 @@ public class SynchronisationService {
                 case LIT -> synchronisationLitsService.tester();
                 case LIT_INFECTE -> synchronisationLitsInfectesService.tester();
                 case EMPLACEMENT -> synchronisationEmplacementsService.tester();
+                case BAC -> synchronisationBacsService.tester();
                 default -> throw new BusinessException(
                         "Le test de " + referentiel + " n'est pas encore disponible.");
             };

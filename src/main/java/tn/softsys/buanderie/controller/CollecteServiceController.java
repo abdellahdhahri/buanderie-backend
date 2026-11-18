@@ -1,10 +1,12 @@
 package tn.softsys.buanderie.controller;
 
+import tn.softsys.buanderie.dto.BacInfecteRequest;
+
+import tn.softsys.buanderie.dto.BacInfecteDTO;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import tn.softsys.buanderie.dto.SacsInfectes.SacInfecteDTO;
-import tn.softsys.buanderie.dto.SacsInfectes.SacInfecteRequest;
 import tn.softsys.buanderie.service.Process.CollecteServiceService;
 import java.util.Map;
 
@@ -48,10 +50,10 @@ public class CollecteServiceController {
     }
 
     @PostMapping("/{id}/infecte")
-    public ResponseEntity<SacInfecteDTO> sacInfecte(
+    public ResponseEntity<BacInfecteDTO> quantitesInfectes(
             @PathVariable Long id,
-            @RequestBody SacInfecteRequest req) {
-        return ResponseEntity.ok(service.declarerSacInfecte(id, req));
+            @RequestBody BacInfecteRequest req) {
+        return ResponseEntity.ok(service.declarerQuantitesInfectes(id, req));
     }
 
     @PostMapping("/{id}/propre")

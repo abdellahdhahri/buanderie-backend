@@ -11,5 +11,9 @@ public class ReclamationRequest {
     private String codeOuTag;
 
     private String matriculeAgent;
+
+    private String codeMachine;
+
+    private String description;
     private TypeReclamation type;
 }

@@ -21,7 +21,6 @@ import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
 import tn.softsys.buanderie.exception.*;
 import tn.softsys.buanderie.repository.*;
-import tn.softsys.buanderie.service.management.SacInfecteService;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -40,8 +39,6 @@ public class CollecteChambreService {
     private final CollecteRepository collecteRepo;
     private final CollecteLingeRepository collecteLingeRepo;
     private final HistoriqueLingeRepository historiqueRepo;
-    private final SacInfecteRepository sacInfecteRepository;
-    private final SacInfecteService sacInfecteService;
 
 
 
@@ -67,7 +64,7 @@ public class CollecteChambreService {
             );
         }
 
-        if (collecte.getChambreIdSqlServer() == null) {
+        if (collecte.getChambreId() == null) {
             throw new BusinessException(
                     "La chambre de la collecte est introuvable."
             );
@@ -96,7 +93,7 @@ public class CollecteChambreService {
         if (lit.getChambreId() == null
                 || !Objects.equals(
                 lit.getChambreId(),
-                collecte.getChambreIdSqlServer()
+                collecte.getChambreId()
         )) {
 
             throw new BusinessException(
@@ -122,7 +119,7 @@ public class CollecteChambreService {
 
 
         List<Linge> linges =
-                lingeRepo.findByLitIdSqlServerInAndEtat(
+                lingeRepo.findByLitIdInAndEtat(
                         List.of(litId),
                         EtatLinge.LIVRE
                 );
@@ -301,14 +298,14 @@ public class CollecteChambreService {
             //
             // Le lien est :
             //
-            // Linge.litIdSqlServer
+            // Linge.litId
             //             ↓
             //       Cubix Lit.id
             //
             // ----------------------------------------------------
 
             List<Linge> linges =
-                    lingeRepo.findByLitIdSqlServerInAndEtat(
+                    lingeRepo.findByLitIdInAndEtat(
                             List.of(litId),
                             EtatLinge.LIVRE
                     );
@@ -368,9 +365,9 @@ public class CollecteChambreService {
                                 + " | CODE = "
                                 + linge.getCodeBarre()
                                 + " | LIT_SQL = "
-                                + linge.getLitIdSqlServer()
+                                + linge.getLitId()
                                 + " | CHAMBRE_SQL = "
-                                + linge.getChambreIdSqlServer()
+                                + linge.getChambreId()
                                 + " | ETAT = "
                                 + linge.getEtat()
                 );
@@ -453,8 +450,8 @@ public class CollecteChambreService {
                                                     ? l.getEtat().name()
                                                     : "",
 
-                                            "litIdSqlServer",
-                                            l.getLitIdSqlServer()
+                                            "litId",
+                                            l.getLitId()
                                     )
                             )
                             .collect(Collectors.toList());
@@ -503,7 +500,7 @@ public class CollecteChambreService {
                                         personnelId
                                 )
 
-                                .chambreIdSqlServer(
+                                .chambreId(
                                         chambreId
                                 )
 
@@ -579,7 +576,7 @@ public class CollecteChambreService {
         }
 
 
-        if (collecte.getChambreIdSqlServer() == null) {
+        if (collecte.getChambreId() == null) {
 
             throw new BusinessException(
                     "La chambre de la collecte est introuvable."
@@ -616,7 +613,7 @@ public class CollecteChambreService {
         if (lit.getChambreId() == null
                 || !Objects.equals(
                 lit.getChambreId(),
-                collecte.getChambreIdSqlServer()
+                collecte.getChambreId()
         )) {
 
             throw new BusinessException(
@@ -638,33 +635,23 @@ public class CollecteChambreService {
 
 
         Bac bac = null;
-        SacInfecte sacInfecte = null;
-
         if (infecte) {
 
-            sacInfecte =
-                    sacInfecteRepository
-                            .findByNumeroSac(codeContenant)
-                            .orElse(null);
+            bac =
+                    bacRepo.findByCode(codeContenant)
+                            .or(() -> bacRepo.findByRfidTag(codeContenant))
+                            .orElseThrow(() ->
+                                    new BusinessException(
+                                            "Bac infecté introuvable : "
+                                                    + codeContenant
+                                    )
+                            );
 
-            if (sacInfecte == null) {
-
-                bac =
-                        bacRepo.findByCode(codeContenant)
-                                .or(() -> bacRepo.findByRfidTag(codeContenant))
-                                .orElseThrow(() ->
-                                        new BusinessException(
-                                                "Sac ou bac infecté introuvable : "
-                                                        + codeContenant
-                                        )
-                                );
-
-                if (bac.getTypebac() != TypeBac.INFECTE) {
-                    throw new BusinessException(
-                            "Ce lit est infecté. "
-                                    + "Veuillez scanner un sac infecté ou un bac INFECTE."
-                    );
-                }
+            if (bac.getTypebac() != TypeBac.INFECTE) {
+                throw new BusinessException(
+                        "Ce lit est infecté. "
+                                + "Veuillez scanner un bac INFECTE."
+                );
             }
 
         } else {
@@ -688,7 +675,7 @@ public class CollecteChambreService {
 
 
         List<Linge> linges =
-                lingeRepo.findByLitIdSqlServerInAndEtat(
+                lingeRepo.findByLitIdInAndEtat(
                         List.of(litId),
                         EtatLinge.LIVRE
                 );
@@ -786,10 +773,7 @@ public class CollecteChambreService {
                         ? TypeCollecte.INFECTE
                         : TypeCollecte.BLANC;
 
-        String codeContenantFinal =
-                sacInfecte != null
-                        ? sacInfecte.getNumeroSac()
-                        : bac.getCode();
+        String codeContenantFinal = bac.getCode();
 
 
         List<String> codes =
@@ -801,24 +785,7 @@ public class CollecteChambreService {
                     linge.getEtat();
 
 
-            if (sacInfecte != null) {
-
-                linge.setSacInfecte(
-                        sacInfecte
-                );
-
-                sacInfecteService
-                        .ajouterLingeAuSac(
-                                sacInfecte,
-                                linge
-                        );
-
-            } else {
-
-                linge.setBac(
-                        bac
-                );
-            }
+            linge.setBac(bac);
 
             linge.setEtat(
                     nouvelEtat
@@ -835,12 +802,12 @@ public class CollecteChambreService {
             );
 
 
-            linge.setLitIdSqlServer(
+            linge.setLitId(
                     null
             );
 
 
-            linge.setChambreIdSqlServer(
+            linge.setChambreId(
                     null
             );
 
@@ -940,9 +907,7 @@ public class CollecteChambreService {
                 codeContenantFinal,
 
                 "typeContenant",
-                sacInfecte != null
-                        ? "SAC_INFECTE"
-                        : infecte ? "BAC_INFECTE" : "BAC_BLANC",
+                infecte ? "BAC_INFECTE" : "BAC_BLANC",
 
                 "estInfecte",
                 infecte,
@@ -1527,12 +1492,12 @@ public class CollecteChambreService {
         }
 
 
-        if (collecte.getChambreIdSqlServer() == null) {
+        if (collecte.getChambreId() == null) {
             return false;
         }
 
 
-        if (linge.getLitIdSqlServer() == null) {
+        if (linge.getLitId() == null) {
             return false;
         }
 
@@ -1545,12 +1510,12 @@ public class CollecteChambreService {
 
 
         Long litId =
-                linge.getLitIdSqlServer();
+                linge.getLitId();
 
 
         List<Linge> lingesDuLit =
                 lingeRepo
-                        .findByLitIdSqlServerInAndEtat(
+                        .findByLitIdInAndEtat(
                                 List.of(litId),
                                 EtatLinge.LIVRE
                         );
@@ -1580,7 +1545,7 @@ public class CollecteChambreService {
     public Map<String, Object> declarerLingeInfecte(
             Long collecteId,
             Long lingeId,
-            String codeSacInfecte) {
+            String codeBacInfecte) {
 
 
         Collecte collecte = findC(collecteId);
@@ -1598,9 +1563,9 @@ public class CollecteChambreService {
             );
         }
 
-        if (codeSacInfecte == null || codeSacInfecte.isBlank()) {
+        if (codeBacInfecte == null || codeBacInfecte.isBlank()) {
             throw new BusinessException(
-                    "Le code du sac infecté est obligatoire."
+                    "Le code du bac infecté est obligatoire."
             );
         }
 
@@ -1629,25 +1594,33 @@ public class CollecteChambreService {
         }
 
 
-        SacInfecte sacInfecte =
-                sacInfecteRepository
-                        .findByNumeroSac(codeSacInfecte)
+        Bac bacInfecte =
+                bacRepo.findByCode(codeBacInfecte)
+                        .or(() -> bacRepo.findByRfidTag(codeBacInfecte))
                         .orElseThrow(() ->
                                 new BusinessException(
-                                        "Sac infecté introuvable : "
-                                                + codeSacInfecte
+                                        "Bac infecté introuvable : "
+                                                + codeBacInfecte
                                 )
                         );
+
+        if (bacInfecte.getTypebac() != TypeBac.INFECTE) {
+            throw new BusinessException(
+                    "Le bac " + bacInfecte.getCode() + " n'est pas un bac infecté."
+            );
+        }
 
 
         EtatLinge ancienEtat = linge.getEtat();
 
-        linge.setSacInfecte(sacInfecte);
+        linge.setBac(bacInfecte);
 
-        sacInfecteService.ajouterLingeAuSac(
-                sacInfecte,
-                linge
-        );
+        if (bacInfecte.getEtat() == null
+                || bacInfecte.getEtat() == EtatBac.EN_ATTENTE_COLLECTE
+                || bacInfecte.getEtat() == EtatBac.VIDE) {
+            bacInfecte.setEtat(EtatBac.COLLECTE);
+            bacRepo.save(bacInfecte);
+        }
 
 
         linge.setEtat(
@@ -1663,8 +1636,8 @@ public class CollecteChambreService {
         );
 
 
-        linge.setLitIdSqlServer(null);
-        linge.setChambreIdSqlServer(null);
+        linge.setLitId(null);
+        linge.setChambreId(null);
 
         lingeRepo.save(linge);
 
@@ -1675,7 +1648,7 @@ public class CollecteChambreService {
                         .linge(linge)
                         .typeCollecte(TypeCollecte.INFECTE)
                         .numeroSacInfecte(
-                                sacInfecte.getNumeroSac()
+                                bacInfecte.getCode()
                         )
                         .dateScan(LocalDateTime.now())
                         .build()
@@ -1702,9 +1675,9 @@ public class CollecteChambreService {
                                 "Linge déclaré infecté "
                                         + "par l'agent. "
                                         + "Lit="
-                                        + linge.getLitIdSqlServer()
-                                        + " | Sac="
-                                        + sacInfecte.getNumeroSac()
+                                        + linge.getLitId()
+                                        + " | Bac="
+                                        + bacInfecte.getCode()
                         )
                         .build()
         );
@@ -1721,14 +1694,14 @@ public class CollecteChambreService {
                 "codeBarre",
                 linge.getCodeBarre(),
 
-                "codeSacInfecte",
-                sacInfecte.getNumeroSac(),
+                "codeBacInfecte",
+                bacInfecte.getCode(),
 
                 "statut",
                 "INFECTE_PRESUME",
 
                 "message",
-                "Linge déclaré infecté et placé dans le sac infecté."
+                "Linge déclaré infecté et placé dans le bac infecté."
         );
     }
 }

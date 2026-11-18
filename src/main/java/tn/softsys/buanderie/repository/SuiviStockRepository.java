@@ -18,7 +18,7 @@ public interface SuiviStockRepository extends Repository<Linge, Long> {
                    l.categorie,
                    l.etat,
                    CASE WHEN l.arsenalEmplacementID IS NULL THEN 0 ELSE 1 END,
-                   CASE WHEN l.litIdSqlServer IS NULL AND l.chambreIdSqlServer IS NULL THEN 0 ELSE 1 END,
+                   CASE WHEN l.litId IS NULL AND l.chambreId IS NULL THEN 0 ELSE 1 END,
                    CASE WHEN l.porteurId IS NULL THEN 0 ELSE 1 END,
                    COUNT(l)
             FROM Linge l
@@ -27,7 +27,7 @@ public interface SuiviStockRepository extends Repository<Linge, Long> {
                      l.categorie,
                      l.etat,
                      CASE WHEN l.arsenalEmplacementID IS NULL THEN 0 ELSE 1 END,
-                     CASE WHEN l.litIdSqlServer IS NULL AND l.chambreIdSqlServer IS NULL THEN 0 ELSE 1 END,
+                     CASE WHEN l.litId IS NULL AND l.chambreId IS NULL THEN 0 ELSE 1 END,
                      CASE WHEN l.porteurId IS NULL THEN 0 ELSE 1 END
             """)
     List<Object[]> agregerParc(@Param("sortis") Collection<EtatImmobilisation> sortis);

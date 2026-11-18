@@ -1,18 +1,26 @@
 package tn.softsys.buanderie.service.Reporting;
 
+import java.util.Map;
+
+import java.util.LinkedHashMap;
+
+import tn.softsys.buanderie.dto.Collectes.CollecteHistoriqueDTO;
+import tn.softsys.buanderie.dto.Collectes.CollecteListeDTO;
+import tn.softsys.buanderie.entity.BacQuantite;
+
+import tn.softsys.buanderie.entity.Bac;
+
+import tn.softsys.buanderie.repository.BacQuantiteRepository;
 import tn.softsys.buanderie.repository.ServiceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tn.softsys.buanderie.dto.CollecteHistoriqueDTO;
-import tn.softsys.buanderie.dto.CollecteListeDTO;
+
 import tn.softsys.buanderie.entity.Collecte;
 import tn.softsys.buanderie.entity.CollecteLinge;
-import tn.softsys.buanderie.entity.SacInfecte;
 import tn.softsys.buanderie.exception.ResourceNotFoundException;
 import tn.softsys.buanderie.repository.CollecteLingeRepository;
 import tn.softsys.buanderie.repository.CollecteRepository;
-import tn.softsys.buanderie.repository.SacInfecteRepository;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -24,8 +32,8 @@ public class CollecteHistoriqueService {
 
     private final CollecteRepository          collecteRepo;
     private final CollecteLingeRepository     collecteLingeRepo;
-    private final SacInfecteRepository        sacInfecteRepo;
-    private final ServiceRepository  sqlServiceRepo;
+    private final BacQuantiteRepository bacQuantiteRepo;
+    private final ServiceRepository  serviceRepository;
 
     public List<CollecteListeDTO> getAllCollectes() {
         return collecteRepo.findAll().stream()
@@ -61,16 +69,16 @@ public class CollecteHistoriqueService {
                         "Collecte", "id", collecteId));
 
         List<CollecteLinge> lignes = collecteLingeRepo.findByCollecte_Id(collecteId);
-        List<SacInfecte> sacs = sacInfecteRepo.findByCollecte_Id(collecteId);
+        List<BacQuantite> quantites = bacQuantiteRepo.findByCollecteId(collecteId);
 
         String serviceCode = null;
         if (c.getService() != null) {
-            serviceCode = sqlServiceRepo.findById(c.getService())
+            serviceCode = serviceRepository.findById(c.getService())
                     .map(s -> s.getCode()).orElse(null);
         }
 
-        int total = lignes.size() + sacs.stream()
-                .mapToInt(s -> s.getQuantiteDeclaree() != null ? s.getQuantiteDeclaree() : 0)
+        int total = lignes.size() + quantites.stream()
+                .mapToInt(q -> q.getQuantiteDeclaree() != null ? q.getQuantiteDeclaree() : 0)
                 .sum();
 
         List<CollecteHistoriqueDTO.CollecteLingeDTO> lingesDTO = lignes.stream()
@@ -94,28 +102,31 @@ public class CollecteHistoriqueService {
                         .build())
                 .collect(Collectors.toList());
 
-        List<CollecteHistoriqueDTO.SacInfecteResumeDTO> sacsDTO = sacs.stream()
-                .map(sac -> CollecteHistoriqueDTO.SacInfecteResumeDTO.builder()
-                        .id(sac.getId())
-                        .numeroSac(sac.getNumeroSac())
-                        .etat(sac.getEtat() != null ? sac.getEtat().name() : null)
-                        .quantiteDeclaree(sac.getQuantiteDeclaree())
-                        .quantiteCompteePostLavage(sac.getQuantiteCompteePostLavage())
-                        .ecart(sac.getEcart())
-                        .dateCollecte(sac.getDateCollecte())
-                        .dateReception(sac.getDateReception())
-                        .items(sac.getItems() != null
-                                ? sac.getItems().stream().map(item ->
-                                CollecteHistoriqueDTO.SacInfecteResumeDTO.SacItemDTO.builder()
-                                .categorie(item.getCategorie() != null
-                                           ? item.getCategorie().name() : null)
-                                .quantiteDeclaree(item.getQuantiteDeclaree())
-                                .quantiteComptee(item.getQuantiteComptee())
-                                .ecart(item.getEcart())
-                                .build())
-                                  .collect(Collectors.toList())
-                                : List.of())
-                        .build())
+        Map<Long, List<BacQuantite>> parBac = quantites.stream()
+                .collect(Collectors.groupingBy(
+                        q -> q.getBac().getId(),
+                        LinkedHashMap::new,
+                        Collectors.toList()));
+
+        List<CollecteHistoriqueDTO.BacInfecteResumeDTO> bacsDTO = parBac.values().stream()
+                .map(lignesBac -> {
+                    Bac bac = lignesBac.get(0).getBac();
+                    int totalBac = lignesBac.stream()
+                            .mapToInt(q -> q.getQuantiteDeclaree() != null ? q.getQuantiteDeclaree() : 0)
+                            .sum();
+                    return CollecteHistoriqueDTO.BacInfecteResumeDTO.builder()
+                            .bacId(bac.getId())
+                            .codeBac(bac.getCode())
+                            .quantiteDeclaree(totalBac)
+                            .dateDeclaration(lignesBac.get(0).getDateDeclaration())
+                            .items(lignesBac.stream()
+                                    .map(q -> CollecteHistoriqueDTO.BacInfecteResumeDTO.ItemDTO.builder()
+                                            .categorie(q.getCategorie() != null ? q.getCategorie().name() : null)
+                                            .quantiteDeclaree(q.getQuantiteDeclaree())
+                                            .build())
+                                    .collect(Collectors.toList()))
+                            .build();
+                })
                 .collect(Collectors.toList());
 
         return CollecteHistoriqueDTO.builder()
@@ -128,7 +139,7 @@ public class CollecteHistoriqueService {
                 //   ? c.getAgent().getNom() + " " + c.getAgent().getPrenom() : null)
                 .serviceId(c.getService())
                 .serviceCode(serviceCode)
-                .chambreIdSqlServer(c.getChambreIdSqlServer())
+                .chambreId(c.getChambreId())
                 .codeChambre(c.getCodeChambre())
                 .dateCollecte(c.getDateCollecte())
                 .dateFin(c.getDateFin())
@@ -139,14 +150,14 @@ public class CollecteHistoriqueService {
                 .nbManquants(c.getNbManquants())
                 .nbTotal(total)
                 .linges(lingesDTO)
-                .sacsInfectes(sacsDTO)
+                .bacsInfectes(bacsDTO)
                 .build();
     }
 
     private CollecteListeDTO toListeDTO(Collecte c) {
         String serviceCode = null;
         if (c.getService() != null) {
-            serviceCode = sqlServiceRepo.findById(c.getService())
+            serviceCode = serviceRepository.findById(c.getService())
                     .map(s -> s.getCode()).orElse(null);
         }
         int nbTotal = (c.getNbScannésBlanc() != null ? c.getNbScannésBlanc() : 0)

@@ -4,5 +4,6 @@ public enum TypeAuthentification {
     AUCUNE,
     BEARER,
     CLE_API,
-    BASIC
+    BASIC,
+    CUBIX
 }

@@ -186,7 +186,7 @@ public class LitService {
 
     private void verifierSansLinge(Lit lit) {
         int nombre = lingeRepository
-                .findByLitIdSqlServerInAndEtat(List.of(CleReferentiel.cle(lit)), EtatLinge.LIVRE)
+                .findByLitIdInAndEtat(List.of(CleReferentiel.cle(lit)), EtatLinge.LIVRE)
                 .size();
         if (nombre > 0) {
             throw new BusinessException("Impossible : " + nombre + " linge(s) sont affectés à ce lit.");

@@ -1,5 +1,13 @@
 package tn.softsys.buanderie.controller;
 
+import java.util.Comparator;
+
+import java.util.ArrayList;
+
+import tn.softsys.buanderie.repository.LingeRepository;
+
+import tn.softsys.buanderie.entity.Linge;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,6 +26,7 @@ public class TrackingController {
     private final LingeService lingeService;
     private final TrackingService trackingService;
     private final HistoriqueLingeRepository historiqueLingeRepository;
+    private final LingeRepository lingeRepository;
 
     @GetMapping("/historique/code/{codeBarre}")
     public List<HistoriqueLinge> historiqueParCode(@PathVariable String codeBarre) {
@@ -31,18 +40,18 @@ public class TrackingController {
     @GetMapping("/collecte/{collecteId}")
     public ResponseEntity<List<HistoriqueLinge>> historiqueParCollecte(@PathVariable Long collecteId) {
         return ResponseEntity.ok(
-            historiqueLingeRepository.findByCollecte_IdOrderByDateOperationDesc(collecteId)
+                historiqueLingeRepository.findByCollecte_IdOrderByDateOperationDesc(collecteId)
         );
     }
 
-    /**
-     * GET /tracking/sac/{numeroSac}
-     * Historique complet d'un sac infecté
-     */
-    @GetMapping("/sac/{numeroSac}")
-    public ResponseEntity<List<HistoriqueLinge>> historiqueParSac(@PathVariable String numeroSac) {
-        return ResponseEntity.ok(
-            historiqueLingeRepository.findBySacInfecte_NumeroSacOrderByDateOperationDesc(numeroSac)
-        );
+ 
+    @GetMapping("/bac/{codeBac}")
+    public ResponseEntity<List<HistoriqueLinge>> historiqueParBac(@PathVariable String codeBac) {
+        List<HistoriqueLinge> resultat = new ArrayList<>();
+        for (Linge linge : lingeRepository.findByBac_Code(codeBac)) {
+            resultat.addAll(historiqueLingeRepository.findByLingeIdOrderByDateOperationDesc(linge.getId()));
+        }
+        resultat.sort(Comparator.comparing(HistoriqueLinge::getDateOperation).reversed());
+        return ResponseEntity.ok(resultat);
     }
 }

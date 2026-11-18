@@ -69,8 +69,6 @@ public class Machine {
     @Column(name = "clinique_id")
     private Long cliniqueId;
 
-    @Column(name = "legacy_lot_article_immobilisation_id")
-    private Long legacyLotArticleImmobilisationId;
 
     @Column(name = "num_lot")
     private Long numLot;
@@ -171,9 +169,6 @@ public class Machine {
         return id;
     }
 
-    public Long getLegacyLotArticleImmobilisationId() {
-        return legacyLotArticleImmobilisationId;
-    }
 
     public Long getNumLot() {
         return numLot;

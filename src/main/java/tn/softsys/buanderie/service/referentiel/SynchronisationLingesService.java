@@ -38,7 +38,7 @@ import tn.softsys.buanderie.repository.ServiceRepository;
 @Service
 public class SynchronisationLingesService {
 
-    private static final int TAILLE_PAGE = 200;
+    private static final int TAILLE_PAGE = 500;
     private static final int TAILLE_LOT = 500;
 
     private final IntegrationService integrationService;

@@ -34,7 +34,7 @@ public class StockageService {
     private final AgentRepository agentRepository;
     private final ArsenalRepository arsenalRepository;
     private final NotificationService notificationService;
-    private final PersonnelRepository sqlPersonnelRepo;
+    private final PersonnelRepository personnelRepository;
     private final ParcoursService parcoursService;
 
 
@@ -46,7 +46,7 @@ public class StockageService {
 
 
         //recuperer l'agent
-        Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
+        Personnel agent = personnelRepository.findByCodeBarre(request.getMatriculeAgent());
         if (agent == null) {
             throw new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent());
         }

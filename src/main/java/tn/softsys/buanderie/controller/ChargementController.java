@@ -38,30 +38,30 @@ public class ChargementController {
         return ResponseEntity.ok(chargementService.enAttenteDeLavage());
     }
 
-    @GetMapping("/{codeLot}")
-    public ResponseEntity<ChargementDTO> consulter(@PathVariable String codeLot) {
-        return ResponseEntity.ok(chargementService.consulter(codeLot));
+    @GetMapping("/{codeBac}")
+    public ResponseEntity<ChargementDTO> consulter(@PathVariable String codeBac) {
+        return ResponseEntity.ok(chargementService.consulter(codeBac));
     }
 
-    @PostMapping("/{codeLot}/pesee")
+    @PostMapping("/{codeBac}/pesee")
     public ResponseEntity<ChargementDTO> peser(
-            @PathVariable String codeLot,
+            @PathVariable String codeBac,
             @RequestBody PeseeChargementRequest request) {
-        return ResponseEntity.ok(chargementService.peser(codeLot, request));
+        return ResponseEntity.ok(chargementService.peser(codeBac, request));
     }
 
-    @PostMapping("/{codeLot}/validation")
+    @PostMapping("/{codeBac}/validation")
     public ResponseEntity<ChargementDTO> valider(
-            @PathVariable String codeLot,
+            @PathVariable String codeBac,
             @RequestBody ValidationChargementRequest request) {
-        return ResponseEntity.ok(chargementService.valider(codeLot, request));
+        return ResponseEntity.ok(chargementService.valider(codeBac, request));
     }
 
-    @DeleteMapping("/{codeLot}/linges/{codeOuTag}")
+    @DeleteMapping("/{codeBac}/linges/{codeOuTag}")
     public ResponseEntity<ChargementDTO> retirer(
-            @PathVariable String codeLot,
+            @PathVariable String codeBac,
             @PathVariable String codeOuTag,
             @RequestParam String matriculeAgent) {
-        return ResponseEntity.ok(chargementService.retirer(codeLot, codeOuTag, matriculeAgent));
+        return ResponseEntity.ok(chargementService.retirer(codeBac, codeOuTag, matriculeAgent));
     }
 }

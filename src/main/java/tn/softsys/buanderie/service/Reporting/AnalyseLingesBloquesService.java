@@ -215,6 +215,8 @@ public class AnalyseLingesBloquesService {
                 continue;
             }
 
+
+
             EtatLinge etat = (EtatLinge) row[4];
             Integer seuil = seuils.get(etat);
 

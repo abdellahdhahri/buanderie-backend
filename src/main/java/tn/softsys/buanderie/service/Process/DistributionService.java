@@ -35,7 +35,6 @@ public class DistributionService {
     private final DistributionLingeRepository  distributionLingeRepo;
     private final CollecteRepository           collecteRepo;
     private final CollecteLingeRepository      collecteLingeRepo;
-    private final SacInfecteRepository         sacInfecteRepo;
     private final LingeRepository              lingeRepo;
     private final AgentRepository              agentRepo;
     private final HistoriqueLingeRepository    historiqueRepo;
@@ -43,8 +42,8 @@ public class DistributionService {
     private final ChambreLitReferentielService chambreLitService;
     private final ParcoursService parcoursService;
     private final ProfilExploitationService profilExploitationService;
-    private final ServiceRepository   sqlServiceRepo;
-    private final PersonnelRepository sqlPersonnelRepo;
+    private final ServiceRepository   serviceRepository;
+    private final PersonnelRepository personnelRepository;
     private final ArsenalRepository arsenalRepository;
 
 
@@ -52,7 +51,7 @@ public class DistributionService {
     public Map<String, Object> scanChambrePourDistribution(
             String codeBarre, String matriculeAgent) {
 
-        sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+        personnelRepository.findByCodeBarre(matriculeAgent);
 //                .orElseThrow(() -> new ResourceNotFoundException(
 //                        "Agent", "matricule", matriculeAgent));
 
@@ -71,7 +70,7 @@ public class DistributionService {
 
         List<Map<String, Object>> litsDto = lits.stream().map(lit -> {
             List<Linge> poses = lingeRepo
-                    .findByLitIdSqlServerInAndEtat(List.of(lit.getId()), EtatLinge.LIVRE);
+                    .findByLitIdInAndEtat(List.of(lit.getId()), EtatLinge.LIVRE);
             boolean litVide = poses.isEmpty();
             return Map.<String, Object>of(
                     "litId",         lit.getId(),
@@ -88,12 +87,12 @@ public class DistributionService {
         }).collect(Collectors.toList());
 
         List<Linge> disponibles = lingesDisponibles().stream()
-                .filter(l -> l.getChambreIdSqlServer() == null
-                        || l.getChambreIdSqlServer().equals(chambre.getId()))
+                .filter(l -> l.getChambreId() == null
+                        || l.getChambreId().equals(chambre.getId()))
                 .collect(Collectors.toList());
 
         List<Map<String, Object>> dansChambre = lingeRepo
-                .findByChambreIdSqlServerAndEtat(chambre.getId(), EtatLinge.LIVRE).stream()
+                .findByChambreIdAndEtat(chambre.getId(), EtatLinge.LIVRE).stream()
                 .map(l -> Map.<String, Object>of(
                         "lingeId",   l.getId(),
                         "codeBarre", l.getCodeBarre(),
@@ -122,7 +121,7 @@ public class DistributionService {
                                                 String matriculeAgent) {
         profilExploitationService.exigerNiveau(NiveauRattachement.LIT);
 
-        Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+        Personnel agent = personnelRepository.findByCodeBarre(matriculeAgent);
 //                .orElseThrow(() -> new ResourceNotFoundException(
 //                        "Agent", "matricule", matriculeAgent));
 
@@ -133,9 +132,9 @@ public class DistributionService {
                     "Linge non disponible — état : " + linge.getEtat()
                             + " (attendu : " + libelleEtatsDisponibles() + ")");
 
-        if (linge.getLitIdSqlServer() != null)
+        if (linge.getLitId() != null)
             throw new BusinessException(
-                    "Linge déjà affecté au lit " + linge.getLitIdSqlServer());
+                    "Linge déjà affecté au lit " + linge.getLitId());
 
         Long serviceId = chambreLitService.findChambreById(chambreId)
                 .map(ChambreDto::getServiceId)
@@ -143,8 +142,8 @@ public class DistributionService {
 
         EtatLinge ancien = linge.getEtat();
 
-        linge.setLitIdSqlServer(litId);
-        linge.setChambreIdSqlServer(chambreId);
+        linge.setLitId(litId);
+        linge.setChambreId(chambreId);
         linge.setServiceId(serviceId);
         linge.setPorteurId(null);
         linge.setPorteurNom(null);
@@ -187,7 +186,7 @@ public class DistributionService {
                         "Agent", "matricule", matriculeAgent));
 
         ServiceEntity svc =
-                sqlServiceRepo.findById(serviceId)
+                serviceRepository.findById(serviceId)
                         .orElseThrow(() -> new ResourceNotFoundException(
                                 "Service", "id", serviceId));
 
@@ -220,7 +219,7 @@ public class DistributionService {
     public Map<String, Object> distribuerAuService(Long serviceId,
                                                    String codeOuTag,
                                                    String matriculeAgent) {
-        Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+        Personnel agent = personnelRepository.findByCodeBarre(matriculeAgent);
 //                .orElseThrow(() -> new ResourceNotFoundException(
 //                        "Agent", "matricule", matriculeAgent));
 
@@ -233,8 +232,8 @@ public class DistributionService {
         EtatLinge ancien = linge.getEtat();
 
         linge.setServiceId(serviceId);
-        linge.setLitIdSqlServer(null);
-        linge.setChambreIdSqlServer(null);
+        linge.setLitId(null);
+        linge.setChambreId(null);
         linge.setPorteurId(null);
         linge.setPorteurNom(null);
         linge.setEtat(EtatLinge.LIVRE);
@@ -265,11 +264,11 @@ public class DistributionService {
 
     public Map<String, Object> getUniformesPourPersonnel(String codeBadge,
                                                          String matriculeAgent) {
-        sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+        personnelRepository.findByCodeBarre(matriculeAgent);
 //                .orElseThrow(() -> new ResourceNotFoundException(
 //                        "Agent", "matricule", matriculeAgent));
 
-        Personnel p = sqlPersonnelRepo.findByCodeBarre(codeBadge);
+        Personnel p = personnelRepository.findByCodeBarre(codeBadge);
         if (p == null)
             throw new BusinessException("Personnel introuvable : " + codeBadge);
 
@@ -305,7 +304,7 @@ public class DistributionService {
                                                   String porteurNom,
                                                   String codeOuTag,
                                                   String matriculeAgent) {
-        Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+        Personnel agent = personnelRepository.findByCodeBarre(matriculeAgent);
 //                .orElseThrow(() -> new ResourceNotFoundException(
 //                        "Agent", "matricule", matriculeAgent));
 
@@ -320,8 +319,8 @@ public class DistributionService {
         linge.setPorteurId(porteurId);
         linge.setPorteurNom(porteurNom);
         linge.setServiceId(null);
-        linge.setLitIdSqlServer(null);
-        linge.setChambreIdSqlServer(null);
+        linge.setLitId(null);
+        linge.setChambreId(null);
         linge.setEtat(EtatLinge.LIVRE);
         linge.setStatutCollecte(null);
         linge.setEmplacement(null);
@@ -350,12 +349,12 @@ public class DistributionService {
 
     @Transactional
     public Distribution creerDistribution(DistributionRequest request) {
-        Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
+        Personnel agent = personnelRepository.findByCodeBarre(request.getMatriculeAgent());
 //                .orElseThrow(() -> new ResourceNotFoundException(
 //                        "Agent", "matricule", request.getMatriculeAgent()));
 
         ServiceEntity service =
-                sqlServiceRepo.findById(request.getServiceId())
+                serviceRepository.findById(request.getServiceId())
                         .orElseThrow(() -> new ResourceNotFoundException(
                                 "Service", "id", request.getServiceId()));
 
@@ -375,7 +374,7 @@ public class DistributionService {
 
     @Transactional
     public void scannerLinge(Long distributionId, String codeOuTag,
-                             Long litIdSqlServer, Long chambreIdSqlServer) {
+                             Long litId, Long chambreId) {
         Distribution dist = distributionRepo.findById(distributionId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Distribution", "id", distributionId));
@@ -391,9 +390,9 @@ public class DistributionService {
         linge.setStatutCollecte(null);
         linge.setServiceId(serviceId);
 
-        if (litIdSqlServer != null) {
-            linge.setLitIdSqlServer(litIdSqlServer);
-            linge.setChambreIdSqlServer(chambreIdSqlServer);
+        if (litId != null) {
+            linge.setLitId(litId);
+            linge.setChambreId(chambreId);
         }
         lingeRepo.save(linge);
 
@@ -487,7 +486,7 @@ public class DistributionService {
 
         Personnel agent = matriculeAgent == null || matriculeAgent.isBlank()
                 ? null
-                : sqlPersonnelRepo.findByCodeBarre(matriculeAgent.trim());
+                : personnelRepository.findByCodeBarre(matriculeAgent.trim());
         if (agent == null) {
             throw new BusinessException("Agent introuvable : " + matriculeAgent);
         }
@@ -506,8 +505,8 @@ public class DistributionService {
 
         EtatLinge ancien = linge.getEtat();
 
-        linge.setLitIdSqlServer(null);
-        linge.setChambreIdSqlServer(chambreId);
+        linge.setLitId(null);
+        linge.setChambreId(chambreId);
         linge.setServiceId(serviceId);
         linge.setPorteurId(null);
         linge.setPorteurNom(null);
@@ -542,7 +541,7 @@ public class DistributionService {
     public Map<String, Object> retirerLinge(String codeOuTag, String matriculeAgent) {
         Personnel agent = matriculeAgent == null || matriculeAgent.isBlank()
                 ? null
-                : sqlPersonnelRepo.findByCodeBarre(matriculeAgent.trim());
+                : personnelRepository.findByCodeBarre(matriculeAgent.trim());
         if (agent == null) {
             throw new BusinessException("Agent introuvable : " + matriculeAgent);
         }
@@ -555,8 +554,8 @@ public class DistributionService {
                             + linge.getEtat() + ").");
         }
 
-        Long ancienLit = linge.getLitIdSqlServer();
-        Long ancienneChambre = linge.getChambreIdSqlServer();
+        Long ancienLit = linge.getLitId();
+        Long ancienneChambre = linge.getChambreId();
         if (ancienLit == null && ancienneChambre == null) {
             throw new BusinessException("Ce linge n'est affecté à aucun lit ni à aucune chambre.");
         }
@@ -572,8 +571,8 @@ public class DistributionService {
         }
         boolean distributionAnnulee = etatPrecedent != EtatLinge.LIVRE;
 
-        linge.setLitIdSqlServer(null);
-        linge.setChambreIdSqlServer(null);
+        linge.setLitId(null);
+        linge.setChambreId(null);
 
         if (distributionAnnulee) {
             linge.setEtat(etatPrecedent);

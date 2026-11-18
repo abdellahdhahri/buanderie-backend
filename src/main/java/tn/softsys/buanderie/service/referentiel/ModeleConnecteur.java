@@ -29,7 +29,9 @@ public final class ModeleConnecteur {
                     "idExterne", "designation", "codeBarre", "etatActif", "categorie", "serviceId"),
             Referentiel.MACHINE, List.of(
                     "idExterne", "code", "designation", "reference", "etatActif", "type",
-                    "marque", "capaciteKg", "localisation")
+                    "marque", "capaciteKg", "localisation"),
+            Referentiel.BAC, List.of(
+                    "idExterne", "code", "designation")
     );
 
     private static final Map<Referentiel, String> CHEMINS_CUBIX = Map.of(
@@ -38,10 +40,11 @@ public final class ModeleConnecteur {
             Referentiel.CHAMBRE, "/Importer/BuanderieImport/Chambres",
             Referentiel.LIT, "/Importer/BuanderieImport/LitsParChambre",
             Referentiel.LIT_INFECTE, "/Importer/BuanderieImport/GetLitsInfectes",
-            Referentiel.ARSENAL, "/Importer/ArsenalImport/GetArsenals",
-            Referentiel.EMPLACEMENT, "/Importer/ArsenalImport/GetEmplacements",
-            Referentiel.LINGE, "/Importer/BuanderieImport/Linges",
-            Referentiel.MACHINE, "/Importer/BuanderieImport/Machines"
+            Referentiel.ARSENAL, "/BuanderieApi/Arsenaux",
+            Referentiel.EMPLACEMENT, "/BuanderieApi/Arsenaux",       // même appel : emplacements imbriqués dans chaque arsenal
+            Referentiel.LINGE, "/BuanderieApi/Linges",
+            Referentiel.MACHINE, "/BuanderieApi/Machines",
+            Referentiel.BAC, "/BuanderieApi/Bacs"
     );
 
     private static final Map<Referentiel, String> CHEMINS_STANDARD = Map.of(
@@ -53,7 +56,8 @@ public final class ModeleConnecteur {
             Referentiel.ARSENAL, "/arsenaux",
             Referentiel.EMPLACEMENT, "/emplacements",
             Referentiel.LINGE, "/linges",
-            Referentiel.MACHINE, "/machines"
+            Referentiel.MACHINE, "/machines",
+            Referentiel.BAC, "/bacs"
     );
 
     private ModeleConnecteur() {
@@ -69,11 +73,13 @@ public final class ModeleConnecteur {
 
     public static String cheminListe(TypeConnecteur type, Referentiel referentiel) {
         if (type == TypeConnecteur.CUBIX
+                && (referentiel == Referentiel.MACHINE || referentiel == Referentiel.LINGE
+                || referentiel == Referentiel.BAC
+                || referentiel == Referentiel.ARSENAL || referentiel == Referentiel.EMPLACEMENT)) {
+            return "items";                                  // nouvelle API : {ok,total,page,pageSize,items}
+        }
+        if (type == TypeConnecteur.CUBIX
                 && (referentiel == Referentiel.SERVICE
-                || referentiel == Referentiel.LINGE
-                || referentiel == Referentiel.MACHINE
-                || referentiel == Referentiel.ARSENAL
-                || referentiel == Referentiel.EMPLACEMENT
                 || referentiel == Referentiel.CHAMBRE
                 || referentiel == Referentiel.LIT
                 || referentiel == Referentiel.LIT_INFECTE)) {
@@ -102,10 +108,11 @@ public final class ModeleConnecteur {
         if (referentiel == Referentiel.LINGE) {
             switch (type) {
                 case CUBIX -> {
-                    champs.put("idExterne", "Id");
-                    champs.put("designation", "Designation");
-                    champs.put("codeBarre", "CodeBarre");
-                    champs.put("etatActif", "EtatActif");
+                    // nouvelle API BuanderieApi/Linges
+                    champs.put("idExterne", "id");
+                    champs.put("designation", "designation");
+                    champs.put("codeBarre", "codeBarre");
+                    champs.put("etatActif", "etatActif");
                 }
                 case STANDARD -> CHAMPS.get(Referentiel.LINGE).forEach(c -> champs.put(c, c));
                 case PERSONNALISE -> {
@@ -116,11 +123,11 @@ public final class ModeleConnecteur {
         if (referentiel == Referentiel.MACHINE) {
             switch (type) {
                 case CUBIX -> {
-                    champs.put("idExterne", "Id");
-                    champs.put("code", "CodeBarre");
-                    champs.put("designation", "Designation");
-                    champs.put("reference", "NumeroSerie");
-                    champs.put("etatActif", "EtatActif");
+                    // nouvelle API BuanderieApi/Machines (id = Autoclave.ID ; type = "laveur" | "sechoir")
+                    champs.put("idExterne", "id");
+                    champs.put("code", "codeBarre");
+                    champs.put("designation", "designation");
+                    champs.put("type", "type");
                 }
                 case STANDARD -> CHAMPS.get(Referentiel.MACHINE).forEach(c -> champs.put(c, c));
                 case PERSONNALISE -> {
@@ -171,9 +178,10 @@ public final class ModeleConnecteur {
         if (referentiel == Referentiel.ARSENAL) {
             switch (type) {
                 case CUBIX -> {
-                    champs.put("idExterne", "ArsenalID");
-                    champs.put("nom", "Designation");
-                    champs.put("code", "CodeBarre");
+                    // nouvelle API BuanderieApi/Arsenaux
+                    champs.put("idExterne", "id");
+                    champs.put("nom", "designation");
+                    champs.put("code", "codeBarre");
                 }
                 case STANDARD -> CHAMPS.get(Referentiel.ARSENAL).forEach(c -> champs.put(c, c));
                 case PERSONNALISE -> {
@@ -184,13 +192,27 @@ public final class ModeleConnecteur {
         if (referentiel == Referentiel.EMPLACEMENT) {
             switch (type) {
                 case CUBIX -> {
-                    champs.put("idExterne", "EmplacementID");
-                    champs.put("arsenalId", "ArsenalID");
-                    champs.put("nom", "Nom");
-                    champs.put("numero", "N");
-                    champs.put("codeBarre", "CodeBarre");
+                    // emplacements imbriqués dans Arsenaux : « arsenalId » est ajouté à chacun (id de l'arsenal parent)
+                    champs.put("idExterne", "id");
+                    champs.put("arsenalId", "arsenalId");
+                    champs.put("nom", "nom");
+                    champs.put("codeBarre", "codeBarre");
                 }
                 case STANDARD -> CHAMPS.get(Referentiel.EMPLACEMENT).forEach(c -> champs.put(c, c));
+                case PERSONNALISE -> {
+                }
+            }
+            return champs;
+        }
+        if (referentiel == Referentiel.BAC) {
+            switch (type) {
+                case CUBIX -> {
+                    // nouvelle API BuanderieApi/Bacs (id = Linge_Bac.ID)
+                    champs.put("idExterne", "id");
+                    champs.put("code", "codeBarre");
+                    champs.put("designation", "designation");
+                }
+                case STANDARD -> CHAMPS.get(Referentiel.BAC).forEach(c -> champs.put(c, c));
                 case PERSONNALISE -> {
                 }
             }

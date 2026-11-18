@@ -113,13 +113,13 @@ public class CollecteChambreController {
     public ResponseEntity<Map<String, Object>> declarerLingeInfecte(
             @RequestParam Long collecteId,
             @RequestParam Long lingeId,
-            @RequestParam String codeSacInfecte) {
+            @RequestParam String codeBacInfecte) {
 
         Map<String, Object> result =
                 service.declarerLingeInfecte(
                         collecteId,
                         lingeId,
-                        codeSacInfecte
+                        codeBacInfecte
                 );
 
         return ResponseEntity.ok(result);

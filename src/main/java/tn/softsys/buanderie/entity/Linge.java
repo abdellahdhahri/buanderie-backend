@@ -52,8 +52,6 @@ public class Linge {
     private Long id;
 
 
-    @Column(name = "legacy_lot_article_immobilisation_id")
-    private Long legacyLotArticleImmobilisationId;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
@@ -112,11 +110,11 @@ public class Linge {
     private Bac bac;
 
 
-    @Column(name = "lit_id_sqlserver")
-    private Long litIdSqlServer;
+    @Column(name = "lit_id")
+    private Long litId;
 
-    @Column(name = "chambre_id_sqlserver")
-    private Long chambreIdSqlServer;
+    @Column(name = "chambre_id")
+    private Long chambreId;
 
     @Column(name = "service_id")
     private Long serviceId;
@@ -130,13 +128,6 @@ public class Linge {
 
 
 
-    @ManyToOne(optional = true)
-    @JoinColumn(
-            name = "lot_id",
-            nullable = true
-    )
-    @JsonIgnore
-    private Lot lot;
 
 
 
@@ -194,10 +185,6 @@ public class Linge {
     private StatutCollecteLinge statutCollecte;
 
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "sac_infecte_id")
-    @JsonIgnore
-    private SacInfecte sacInfecte;
 
     @PrePersist
     public void prePersist() {

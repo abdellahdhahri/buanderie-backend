@@ -29,9 +29,9 @@ public class AnalytiqueDashboardService {
     private final CollecteRepository         collecteRepo;
     private final CycleLavageRepository      cycleLavageRepo;
     private final CycleSechageRepository     cycleSechageRepo;
-    private final SacInfecteRepository       sacInfecteRepo;
+    private final BacRepository             bacRepo;
     private final HistoriqueLingeRepository  historiqueRepo;
-    private final ServiceRepository sqlServiceRepo;
+    private final ServiceRepository serviceRepository;
     private final NotificationService notificationService;
     private final ParcoursService parcoursService;
     private final ProfilExploitationService profilExploitationService;
@@ -98,9 +98,10 @@ public class AnalytiqueDashboardService {
         double tauxMachines = machines.isEmpty() ? 0
                 : round((double) enCours / machines.size() * 100);
 
-        long sacsAtt = sacInfecteRepo.findAll().stream()
-                .filter(s -> s.getEtat() == EtatSac.DECLARE
-                        || s.getEtat() == EtatSac.RECEPTIONNE)
+        long bacsAtt = bacRepo.findAll().stream()
+                .filter(b -> b.getTypebac() == TypeBac.INFECTE
+                        && (b.getEtat() == EtatBac.COLLECTE
+                        || b.getEtat() == EtatBac.EN_RECEPTION))
                 .count();
 
         long procheFin = linges.stream()
@@ -122,7 +123,7 @@ public class AnalytiqueDashboardService {
         r.put("collectesAujourdhui",     collectesJ);
         r.put("lavagesAujourdhui",       lavagesJ);
         r.put("tauxOccupationMachines",  tauxMachines);
-        r.put("sacsInfectesEnAttente",   profilExploitationService.circuitInfecteActif() ? sacsAtt : 0L);
+        r.put("bacsInfectesEnAttente",   profilExploitationService.circuitInfecteActif() ? bacsAtt : 0L);
         r.put("circuitInfecteActif",     profilExploitationService.circuitInfecteActif());
         r.put("lingesProcheFin",         procheFin);
         r.put("tauxInfectionMois",       profilExploitationService.circuitInfecteActif() ? tauxInf : 0.0);
@@ -172,7 +173,7 @@ public class AnalytiqueDashboardService {
 
         Set<EtatLinge> etatsDisponibles = etatsDisponibles();
 
-        return sqlServiceRepo.findAll().stream().map(svc -> {
+        return serviceRepository.findAll().stream().map(svc -> {
                     var ls = parService.getOrDefault(svc.getId(), List.of());
 
                     long nbLivre   = ls.stream().filter(l -> l.getEtat() == EtatLinge.LIVRE).count();
@@ -288,31 +289,13 @@ public class AnalytiqueDashboardService {
                 })
                 .collect(Collectors.toList());
 
-        //  Sacs en attente
-        List<Map<String, Object>> alertesSacs = !profilExploitationService.circuitInfecteActif()
-                ? List.<Map<String, Object>>of()
-                : sacInfecteRepo.findAll().stream()
-                  .filter(s -> (s.getEtat() == EtatSac.DECLARE
-                                || s.getEtat() == EtatSac.RECEPTIONNE)
-                               && s.getDateCollecte() != null
-                               && s.getDateCollecte().isBefore(
-                          LocalDateTime.now().minusHours(HEURES_SAC)))
-                  .map(s -> alerteMap(
-                          "SAC_ATTENTE", "CRITICAL",
-                          "Sac infecté en attente depuis +" + HEURES_SAC + "h",
-                          s.getNumeroSac(),
-                          "État : " + s.getEtat().name()
-                          + " — " + s.getQuantiteDeclaree() + " linge(s)"))
-                  .collect(Collectors.toList());
-
         int total = alertesStock.size() + alertesBloquees.size()
-                + alertesFinVie.size() + alertesSacs.size();
+                + alertesFinVie.size();
 
         Map<String, Object> r = new LinkedHashMap<>();
         r.put("stockCritique",  alertesStock);
         r.put("lingesBloqués",  alertesBloquees);
         r.put("finDeVie",       alertesFinVie);
-        r.put("sacsEnAttente",  alertesSacs);
         r.put("totalAlertes",   total);
         return r;
     }

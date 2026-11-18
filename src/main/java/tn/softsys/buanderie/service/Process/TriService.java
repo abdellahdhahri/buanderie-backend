@@ -10,17 +10,23 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
-import tn.softsys.buanderie.repository.PersonnelRepository;
+import tn.softsys.buanderie.dto.AffectationBacRequest;
+import tn.softsys.buanderie.dto.BacDTO;
+import tn.softsys.buanderie.entity.Bac;
+import tn.softsys.buanderie.entity.HistoriqueLinge;
+import tn.softsys.buanderie.entity.Linge;
 import tn.softsys.buanderie.entity.Personnel;
-import tn.softsys.buanderie.dto.Lot.AffectationLotRequest;
-import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.CodeEtape;
+import tn.softsys.buanderie.entity.enums.EtatBac;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
-import tn.softsys.buanderie.entity.enums.EtatLot;
 import tn.softsys.buanderie.entity.enums.TypeOperation;
+import tn.softsys.buanderie.entity.enums.UsageBac;
 import tn.softsys.buanderie.exception.BusinessException;
 import tn.softsys.buanderie.exception.ResourceNotFoundException;
-import tn.softsys.buanderie.repository.*;
+import tn.softsys.buanderie.repository.BacRepository;
+import tn.softsys.buanderie.repository.HistoriqueLingeRepository;
+import tn.softsys.buanderie.repository.LingeRepository;
+import tn.softsys.buanderie.repository.PersonnelRepository;
 import tn.softsys.buanderie.service.management.ParcoursService;
 
 @Service
@@ -30,73 +36,63 @@ public class TriService {
 
     private final LingeRepository lingeRepository;
     private final BacRepository bacRepository;
-    private final AgentRepository agentRepository;
     private final HistoriqueLingeRepository historiqueLingeRepository;
-    private final LotRepository lotRepository;
-    private final PersonnelRepository sqlPersonnelRepo;
+    private final PersonnelRepository personnelRepository;
     private final ParcoursService parcoursService;
 
-
     @Transactional
-    public Lot affecterAuLot(AffectationLotRequest request) {
+    public BacDTO affecterAuBac(AffectationBacRequest request) {
         parcoursService.exigerActive(CodeEtape.TRI);
 
-        Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
+        Personnel agent = request.getMatriculeAgent() == null
+                ? null
+                : personnelRepository.findByCodeBarre(request.getMatriculeAgent());
         if (agent == null) {
             throw new BusinessException("Agent introuvable : " + request.getMatriculeAgent());
         }
-        Linge linge = lingeRepository.findByCodeBarre(request.getCodeOuTag())
-                .orElse(null);
+
+        Linge linge = trouverLinge(request.getCodeOuTag());
         if (linge == null) {
-            linge = lingeRepository.findByRfidTag(request.getCodeOuTag());
+            throw new ResourceNotFoundException("Linge", "codeBarre/rfidTag", request.getCodeOuTag());
         }
-        if (linge == null) {
-            throw new ResourceNotFoundException(
-                    "Linge",
-                    "codeBarre/rfidTag",
-                    request.getCodeOuTag());
-        }
+
         Set<EtatLinge> etatsAcceptes = etatsAcceptesTri();
         if (!etatsAcceptes.contains(linge.getEtat())) {
             throw new BusinessException("Le linge doit être dans l'un des états suivants : "
                     + String.join(", ", etatsAcceptes.stream().map(Enum::name).toList())
                     + " (état actuel : " + linge.getEtat() + ").");
         }
-        Lot lot = lotRepository.findById(request.getLotId())
-                .orElseThrow(() ->
-                        new ResourceNotFoundException("Lot", "id", request.getLotId()));
 
-        if (lot.getEtat() != EtatLot.EN_TRI) {
-            throw new BusinessException("Le lot « " + lot.getCodeLot()
-                    + " » n'est pas ouvert (état : " + lot.getEtat() + ").");
+        Bac bac = trouverBac(request.getCodeBac());
+        exigerBacDeTri(bac);
+
+        if (bac.getEtat() != EtatBac.VIDE && bac.getEtat() != EtatBac.EN_TRI) {
+            throw new BusinessException("Le bac « " + bac.getCode()
+                    + " » n'est pas ouvert au tri (état : " + bac.getEtat() + ").");
         }
 
-        // Vérification catégorie
-        if (!lot.getCategorie().equals(linge.getCategorie())) {
-            throw new BusinessException(
-                    "Le lot n'est pas destiné à cette catégorie.");
+        if (bac.getCategorie() == null) {
+            throw new BusinessException("Le bac « " + bac.getCode()
+                    + " » n'a pas de catégorie : définissez-la pour trier par catégorie.");
         }
-
-        // Vérification type
-        if (lot.getTypeCollecte() != linge.getTypeCollecte()) {
-            throw new BusinessException(
-                    "Le type de collecte ne correspond pas.");
+        if (bac.getCategorie() != linge.getCategorie()) {
+            throw new BusinessException("Le bac n'est pas destiné à cette catégorie.");
+        }
+        if (bac.getTypeCollecte() != linge.getTypeCollecte()) {
+            throw new BusinessException("Le type de collecte ne correspond pas.");
         }
 
         double poidsLinge = linge.getPoids() == null ? 0 : linge.getPoids();
-
         EtatLinge etatAvant = linge.getEtat();
 
-        // Affectation
-        linge.setLot(lot);
+        linge.setBac(bac);
         linge.setEtat(EtatLinge.EN_TRI);
-        linge.setBac(null);
-
         lingeRepository.save(linge);
-        // Mise à jour poids
-        lot.setPoidsActuel(lot.getPoidsActuel() + poidsLinge);
 
-        lotRepository.save(lot);
+        bac.setPoids((bac.getPoids() == null ? 0 : bac.getPoids()) + poidsLinge);
+        bac.setEtat(EtatBac.EN_TRI);
+        bacRepository.save(bac);
+
         historiqueLingeRepository.save(
                 HistoriqueLinge.builder()
                         .linge(linge)
@@ -105,46 +101,32 @@ public class TriService {
                         .personnelId(agent.getId())
                         .typeOperation(TypeOperation.TRI)
                         .dateOperation(LocalDateTime.now())
-                        .observations("Affectation au lot " + lot.getCodeLot())
+                        .observations("Affectation au bac de tri " + bac.getCode())
                         .build());
-        return lot;
+
+        return versDto(bac);
     }
 
-    //methode pour suggerer les  lots de tri pour une linge
     @Transactional(readOnly = true)
-    public List<Lot> suggererLots(String codeOuTag) {
-        // Recherche du linge (code-barres ou RFID)
-        Linge linge = lingeRepository.findByCodeBarre(codeOuTag)
-                .orElse(null);
+    public List<BacDTO> suggererBacs(String codeOuTag) {
+        Linge linge = trouverLinge(codeOuTag);
         if (linge == null) {
-            linge = lingeRepository.findByRfidTag(codeOuTag);
+            throw new ResourceNotFoundException("Linge", "codeBarre/rfidTag", codeOuTag);
         }
-        if (linge == null) {
-            throw new ResourceNotFoundException(
-                    "Linge",
-                    "codeBarre/rfidTag",
-                    codeOuTag);
-
-        }
-
         if (!etatsAcceptesTri().contains(linge.getEtat())) {
             throw new BusinessException(
                     "Le linge n'est pas prêt pour le tri (état actuel : " + linge.getEtat() + ").");
         }
 
-        Linge finalLinge = linge;
-        //Linge finalLinge1 = linge;
-        return lotRepository.findAll().stream()
-                // meme catégorie
-                .filter(l -> l.getCategorie() == finalLinge.getCategorie())
-                // meme type de collecte
-                .filter(l -> l.getTypeCollecte() == finalLinge.getTypeCollecte())
-                // uniquement les lots en cours de tri
-                .filter(l -> l.getEtat() == EtatLot.EN_TRI)
-                // tri du moins rempli au plus rempli
-                .sorted(Comparator.comparing(Lot::getPoidsActuel))
+        return bacRepository.findByUsage(UsageBac.TRI).stream()
+                .filter(b -> b.getCategorie() != null && b.getCategorie() == linge.getCategorie())
+                .filter(b -> b.getTypeCollecte() == linge.getTypeCollecte())
+                .filter(b -> b.getEtat() == EtatBac.VIDE || b.getEtat() == EtatBac.EN_TRI)
+                .sorted(Comparator.comparing(b -> b.getPoids() == null ? 0.0 : b.getPoids()))
+                .map(this::versDto)
                 .toList();
     }
+
     private Set<EtatLinge> etatsAcceptesTri() {
         Set<EtatLinge> etats = new LinkedHashSet<>(parcoursService.etatsAcceptes(CodeEtape.TRI));
         if (etats.isEmpty()) {
@@ -154,9 +136,34 @@ public class TriService {
     }
 
     private Linge trouverLinge(String codeOuTag) {
-        return lingeRepository.findByCodeBarre(codeOuTag)
-                .orElseGet(() -> lingeRepository.findByRfidTag(codeOuTag));
-
+        if (codeOuTag == null || codeOuTag.isBlank()) {
+            return null;
+        }
+        String code = codeOuTag.trim();
+        Linge linge = lingeRepository.findByCodeBarre(code).orElse(null);
+        return linge != null ? linge : lingeRepository.findByRfidTag(code);
     }
 
+    private Bac trouverBac(String codeBac) {
+        if (codeBac == null || codeBac.isBlank()) {
+            throw new BusinessException("Le code du bac est obligatoire.");
+        }
+        String code = codeBac.trim();
+        return bacRepository.findByCode(code)
+                .or(() -> bacRepository.findByRfidTag(code))
+                .orElseThrow(() -> new ResourceNotFoundException("Bac", "code", code));
+    }
+
+    private void exigerBacDeTri(Bac bac) {
+        if (bac.getUsage() != UsageBac.TRI) {
+            throw new BusinessException("Le bac « " + bac.getCode()
+                    + " » n'est pas un bac de tri (usage : " + bac.getUsage() + ").");
+        }
+    }
+
+    private BacDTO versDto(Bac bac) {
+        BacDTO dto = BacDTO.from(bac);
+        dto.setNombreLinges(lingeRepository.findByBacId(bac.getId()).size());
+        return dto;
+    }
 }

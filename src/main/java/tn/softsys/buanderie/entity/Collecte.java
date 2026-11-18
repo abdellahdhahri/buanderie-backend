@@ -26,11 +26,11 @@ public class Collecte {
 
     private Long service;
 
-    @Column(name = "chambre_id_sqlserver")
-    private Long chambreIdSqlServer;
+    @Column(name = "chambre_id")
+    private Long chambreId;
 
-    @Column(name = "lit_id_sqlserver")
-    private Long litIdSqlServer;
+    @Column(name = "lit_id")
+    private Long litId;
 
     @Column(name = "code_chambre", length = 30)
     private String codeChambre;

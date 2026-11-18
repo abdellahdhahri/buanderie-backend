@@ -1,5 +1,11 @@
 package tn.softsys.buanderie.controller;
 
+import tn.softsys.buanderie.service.referentiel.CubixBacImportService;
+
+import tn.softsys.buanderie.entity.enums.TypeCollecte;
+
+import tn.softsys.buanderie.entity.enums.CategLinge;
+
 import jakarta.transaction.Transactional;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
@@ -24,6 +30,21 @@ public class BacController {
 
     private final BacService bacService;
     private final LingeRepository lingeRepository;
+    private final CubixBacImportService cubixBacImportService;
+
+    /** Mode CUBIX : immobilisations importables (à classer comme bacs dans CUBIX). */
+    @GetMapping("/bacsAimporter")
+    public com.fasterxml.jackson.databind.JsonNode bacsAImporter(@RequestParam(required = false) String q,
+                                                                 @RequestParam(defaultValue = "1") int page,
+                                                                 @RequestParam(defaultValue = "50") int pageSize) {
+        return cubixBacImportService.importables(q, page, pageSize);
+    }
+
+    /** Mode CUBIX : importe la sélection (liste d'ids d'immobilisation) puis relit les bacs. */
+    @PostMapping("/import")
+    public java.util.Map<String, Object> importerBacs(@RequestBody List<Long> ids) {
+        return cubixBacImportService.importer(ids);
+    }
 
     @GetMapping
     public List<Bac> listeAll() {
@@ -52,9 +73,22 @@ public class BacController {
         return bacService.findByReference(ref);
        }*/
 
+    @GetMapping("/tri")
+    public List<BacDTO> bacsDeTri(@RequestParam(required = false) EtatBac etat,
+                                  @RequestParam(required = false) CategLinge categorie,
+                                  @RequestParam(required = false) TypeCollecte typeCollecte) {
+        return bacService.listerBacsDeTri(etat, categorie, typeCollecte);
+    }
+
     @GetMapping("/etat/{etat}")
     public List<Bac> getByEtat(@PathVariable EtatBac etat) {
         return bacService.findByEtat(etat);
+    }
+
+    /** Modifie les champs internes d'un bac (seuls les champs fournis changent). */
+    @PutMapping("/{id}")
+    public Bac modifier(@PathVariable Long id, @RequestBody BacDTO bacDTO) {
+        return bacService.modifier(id, bacDTO);
     }
 
     @PostMapping

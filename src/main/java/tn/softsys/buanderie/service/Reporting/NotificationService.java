@@ -75,6 +75,22 @@ public class NotificationService {
     }
 
 
+    public void notifierReclamationMachine(tn.softsys.buanderie.entity.Machine machine, Reclamation reclamation) {
+
+        Notification notification = Notification.builder()
+                .titre("Réclamation machine")
+                .message("Réclamation sur la machine "
+                        + (machine.getDesignation() != null ? machine.getDesignation() : machine.getCode())
+                        + " : " + reclamation.getType().name())
+                .type("RECLAMATION")
+                .dateCreation(LocalDateTime.now())
+                .codeBarre(machine.getCode())
+                .lue(false)
+                .build();
+
+        envoyer(notification);
+    }
+
     public void notifierReclamation(Linge linge, Reclamation reclamation) {
 
         Notification notification = Notification.builder()

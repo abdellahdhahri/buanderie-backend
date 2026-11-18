@@ -29,7 +29,7 @@ public class CollecteUniformeService {
     private final CollecteRepository collecteRepo;
     private final CollecteLingeRepository collecteLingeRepo;
     private final HistoriqueLingeRepository historiqueRepo;
-    private final PersonnelRepository sqlPersonnelRepo;
+    private final PersonnelRepository personnelRepository;
     private final PersonnelReferentielService personnelReferentielService;
     public Map<String, Object> ouvrirUniforme(
             String matriculeAgent,

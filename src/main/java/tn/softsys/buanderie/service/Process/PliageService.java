@@ -19,6 +19,7 @@ import tn.softsys.buanderie.exception.ResourceNotFoundException;
 import tn.softsys.buanderie.repository.AgentRepository;
 import tn.softsys.buanderie.repository.HistoriqueLingeRepository;
 import tn.softsys.buanderie.repository.LingeRepository;
+import java.util.EnumSet;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -32,7 +33,7 @@ public class PliageService {
     private final LingeRepository lingeRepository;
     private final AgentRepository agentRepository;
     private final HistoriqueLingeRepository historiqueRepository;
-    private final PersonnelRepository sqlPersonnelRepo;
+    private final PersonnelRepository personnelRepository;
     private final ParcoursService parcoursService;
 
     @Transactional
@@ -40,7 +41,7 @@ public class PliageService {
         parcoursService.exigerActive(CodeEtape.PLIAGE);
 
 
-        Personnel agent = sqlPersonnelRepo.findByCodeBarre(request.getMatriculeAgent());
+        Personnel agent = personnelRepository.findByCodeBarre(request.getMatriculeAgent());
         if (agent == null) {
             throw new ResourceNotFoundException("Agent", "matricule", request.getMatriculeAgent());
         }

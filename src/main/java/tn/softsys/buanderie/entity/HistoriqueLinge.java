@@ -8,6 +8,7 @@ import tn.softsys.buanderie.entity.enums.TypeOperation;
 import java.time.LocalDateTime;
 
 @Entity
+@EntityListeners(tn.softsys.buanderie.service.referentiel.HistoriqueLingeCubixListener.class)
 @Table(name = "historiques_linge")
 @Data
 @NoArgsConstructor
@@ -49,10 +50,6 @@ public class HistoriqueLinge {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "collecte_id")
     private Collecte collecte;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "sac_infecte_id")
-    private SacInfecte sacInfecte;
 
     @PrePersist
     protected void onCreate() {

@@ -99,7 +99,7 @@ public class SuiviStockService {
         List<Map<String, Object>> linges = source
                 .stream()
                 .filter(l -> zone(l.getEtat(), l.getArsenalEmplacementID() != null,
-                        l.getLitIdSqlServer() != null || l.getChambreIdSqlServer() != null,
+                        l.getLitId() != null || l.getChambreId() != null,
                         l.getPorteurId() != null) == zone)
                 .filter(l -> categorie == null || l.getCategorie() == categorie)
                 .map(this::versLigneLinge)
@@ -227,8 +227,8 @@ public class SuiviStockService {
         m.put("etat", l.getEtat() != null ? l.getEtat().name() : null);
         m.put("serviceId", l.getServiceId());
         m.put("arsenalEmplacementID", l.getArsenalEmplacementID());
-        m.put("chambreId", l.getChambreIdSqlServer());
-        m.put("litId", l.getLitIdSqlServer());
+        m.put("chambreId", l.getChambreId());
+        m.put("litId", l.getLitId());
         m.put("porteurNom", l.getPorteurNom());
         return m;
     }

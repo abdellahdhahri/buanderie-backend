@@ -6,5 +6,6 @@ public enum EtatSac {
     EN_LAVAGE,
     VERIFIE,
     ECART_DETECTE,
-    LINGES_AFFECTES
+    LINGES_AFFECTES,
+    LAVE
 }
