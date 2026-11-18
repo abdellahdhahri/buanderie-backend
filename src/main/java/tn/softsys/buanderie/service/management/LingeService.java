@@ -43,7 +43,6 @@ public class LingeService {
     private final ChambreRepository chambreRepository;
     private final ServiceRepository serviceRepository;
     private final LitRepository litRepository;
-    private final  LotRepository lotRepository;
     private final PersonnelRepository personnelRepository;
 
     public Page<LingeDTO> getLingesPaged(
@@ -144,6 +143,11 @@ public class LingeService {
         return lingeRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Linge", id));
     }
 
+    public Linge GetById(Long id){
+        return lingeRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Linge", id));
+
+    }
+
     public Linge findByCodeBarre(String code) {
         return lingeRepository.findByCodeBarre(code).orElseThrow(() -> new ResourceNotFoundException("Linge", "codeBarre", code));
     }
@@ -176,22 +180,15 @@ public class LingeService {
             chambre = chambreRepository.findById(dto.getChambre_id()).orElse(null);
         }
 
-        Lot lot = null;
-        if (dto.getLotId() != null) {
-            lot = lotRepository.findById(dto.getLotId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Lot", dto.getLotId()));
-        }
-
         EtatLinge etat = dto.getEtat() != null ? dto.getEtat() : EtatLinge.STOCKE;
 
         Linge linge = Linge.builder()
                 .categorie(CategLinge.valueOf(dto.getCategorie()))
-                .chambreIdSqlServer(chambre != null ? CleReferentiel.cle(chambre) : null)
+                .chambreId(chambre != null ? CleReferentiel.cle(chambre) : null)
                 .poids(dto.getPoids())
                 .etat(etat)
                 .serviceId(dto.getServiceId())
                 .bac(bac)
-                .lot(lot)
                 .codeBarre(dto.getCodebarre())
                 .build();
 
@@ -293,7 +290,7 @@ public class LingeService {
                                 ? linge.getCategorie().name()
                                 : null
                 )
-                .chambre_id(linge.getChambreIdSqlServer())
+                .chambre_id(linge.getChambreId())
                 .poids(linge.getPoids())
                 .etat(linge.getEtat())
                 .rfidTag(linge.getRfidTag())
@@ -337,9 +334,9 @@ public class LingeService {
                 .collect(Collectors.toList());
     }
 
-    public List<Linge> getLingesByLotCode(String codeLot) {
+    public List<Linge> getLingesByBacCode(String codeBac) {
 
-        return lingeRepository.findByLot_CodeLot(codeLot);
+        return lingeRepository.findByBac_Code(codeBac);
     }
     public Linge getByRfidTag(String rfidTag){
         return lingeRepository.findByRfidTag(rfidTag);

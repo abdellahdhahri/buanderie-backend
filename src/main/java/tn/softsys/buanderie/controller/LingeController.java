@@ -22,6 +22,7 @@ import tn.softsys.buanderie.entity.enums.CategLinge;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
 import tn.softsys.buanderie.entity.enums.Referentiel;
 import tn.softsys.buanderie.exception.BusinessException;
+import tn.softsys.buanderie.service.referentiel.CubixLingeImportService;
 import tn.softsys.buanderie.service.referentiel.IntegrationService;
 import tn.softsys.buanderie.entity.Linge;
 import tn.softsys.buanderie.service.Process.CollecteServiceService;
@@ -31,10 +32,25 @@ public class LingeController {
     private final LingeService lingeService;
     private final CollecteServiceService collecteService;
     private final IntegrationService integrationService;
+    private final CubixLingeImportService cubixLingeImportService;
 
 
     // @PreAuthorize("hasAuthority('LIG1305')")
     @Operation(summary = "Récupérer les linges avec pagination et filtres")
+    /** Mode CUBIX : immobilisations importables (à classer comme linges dans CUBIX). */
+    @GetMapping("/lingesAimporter")
+    public com.fasterxml.jackson.databind.JsonNode lingesAImporter(@RequestParam(required = false) String q,
+                                                                   @RequestParam(defaultValue = "1") int page,
+                                                                   @RequestParam(defaultValue = "50") int pageSize) {
+        return cubixLingeImportService.importables(q, page, pageSize);
+    }
+
+    /** Mode CUBIX : importe la sélection (liste d'ids d'immobilisation) puis relit les linges. */
+    @PostMapping("/import")
+    public java.util.Map<String, Object> importerLinges(@RequestBody List<Long> ids) {
+        return cubixLingeImportService.importer(ids);
+    }
+
     @GetMapping("/paged")
     public Page<LingeDTO> getLingesPaged(
             @RequestParam(defaultValue = "0") int page,
@@ -106,13 +122,13 @@ public class LingeController {
 
            return lingeService.getLingeInfo(id);
        }*/
-    @Operation(summary = "Récupérer les linges d'un lot")
+    @Operation(summary = "Récupérer les linges d'un bac")
 
-    @GetMapping("/lots/{codeLot}/linges")
-    public List<Linge> getLingesByLot(
-            @PathVariable String codeLot) {
+    @GetMapping("/bacs/{codeBac}/linges")
+    public List<Linge> getLingesByBac(
+            @PathVariable String codeBac) {
 
-        return lingeService.getLingesByLotCode(codeLot);
+        return lingeService.getLingesByBacCode(codeBac);
     }
 
     @PutMapping("/{id}")
@@ -138,6 +154,9 @@ public class LingeController {
                 lingeService.associerTagRfid(request));
     }
 
-
+    @GetMapping("/linges/{id}")
+    public Linge getByIdLinge( @RequestParam  Long id){
+        return lingeService.GetById(id);
+    }
     @Data public static class ChangerEtatRequest { private EtatLinge etat; private String matriculeAgent; private String observations; }
 }

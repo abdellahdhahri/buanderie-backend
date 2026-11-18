@@ -230,7 +230,8 @@ public class SynchronisationMachinesService {
                         .marque(limiter(d.marque, 100))
                         .capaciteKg(d.capaciteKg)
                         .localisation(limiter(d.localisation, 100))
-                        .etatImmobilisation(d.etatImmobilisation)
+                        .etatImmobilisation(d.etatImmobilisation != null
+                                ? d.etatImmobilisation : EtatImmobilisation.DISPONIBLE)
                         .etatTechnique(etatTechniqueInitial(d.etatImmobilisation))
                         .dateSynchro(maintenant)
                         .build());
@@ -297,6 +298,11 @@ public class SynchronisationMachinesService {
                     referencesPrises.put(reference, machine.getId());
                     modifie = true;
                 }
+            }
+
+            if (machine.getEtatImmobilisation() == null) {
+                machine.setEtatImmobilisation(EtatImmobilisation.DISPONIBLE);   // machine déjà importée sans état
+                modifie = true;
             }
 
             if (modifie) {

@@ -1,5 +1,9 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.service.referentiel.CubixMachineEtatService;
+
+import tn.softsys.buanderie.dto.BacScanResponse;
+
 import tn.softsys.buanderie.service.management.ProfilExploitationService;
 
 import lombok.RequiredArgsConstructor;
@@ -9,7 +13,6 @@ import tn.softsys.buanderie.repository.PersonnelRepository;
 import tn.softsys.buanderie.dto.PersonnelDto;
 import tn.softsys.buanderie.entity.Personnel;
 import tn.softsys.buanderie.service.referentiel.PersonnelReferentielService;
-import tn.softsys.buanderie.dto.Lot.LotScanResponse;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
 import tn.softsys.buanderie.exception.BusinessException;
@@ -18,49 +21,34 @@ import tn.softsys.buanderie.repository.*;
 import tn.softsys.buanderie.service.Reporting.NotificationService;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import tn.softsys.buanderie.service.management.ParcoursService;
 
 @Service
 @RequiredArgsConstructor
 public class CycleLavageService {
 
     private final CycleLavageRepository cycleRepo;
-    private final LotRepository lotRepo;
     private final MachineRepository machineRepo;
+    private final CubixMachineEtatService cubixMachineEtat;
     private final ProgrammeLavageRepository programmeRepo;
     private final CycleLavageItemRepository itemRepo;
     private final AgentRepository agentRepository;
     private final LingeRepository lingeRepository;
     private final HistoriqueLingeRepository historiqueLingeRepository;
     private final NotificationService notificationService;
-    private final SacInfecteRepository sacInfecteRepository;
     private final ProfilExploitationService profilExploitationService;
     private final PersonnelReferentielService personnelReferentielService;
-    private final PersonnelRepository sqlPersonnelRepo;
+    private final PersonnelRepository personnelRepository;
+    private final ParcoursService parcoursService;
+    private final BacRepository bacRepository;
 
 
-    public LotScanResponse scanLot(String codeLot) {
-        Lot lot = lotRepo.findByCodeLot(codeLot)
-                .orElseThrow(() -> new ResourceNotFoundException("Lot", "code", codeLot));
-        SuggestionProgramme suggestion = resoudreProgramme(lot.getCategorie());
-        ProgrammeLavage programme = suggestion.programme();
-        return LotScanResponse.builder()
-                .codeLot(lot.getCodeLot())
-                .categorie(lot.getCategorie())
-                //.poidsRestant(lot.getPoidsRestant())
-                //.quantiteRestante(lot.getQuantiteRestante())
-                .programmeRecommande(programme.getNom())
-                .programmeId(programme.getId())
-                .temperature(programme.getTemperatureCelsius())
-                .description(programme.getDescription())
-                .vitesse(programme.getVitesseEssorageRpm())
-                .duree(programme.getDureeMinutes())
-                .origineProgramme(suggestion.parDefaut() ? "DEFAUT" : "CATEGORIE")
-                .programmeParDefaut(suggestion.parDefaut())
-                .build();
-    }
 
     private record SuggestionProgramme(ProgrammeLavage programme, boolean parDefaut) {}
 
@@ -95,121 +83,17 @@ public class CycleLavageService {
 
 
 
-    @Transactional
-    public CycleLavage startCycle(String codeMachine,
-                                  String codeLot,
-                                  String matriculeAgent,
-                                  Double poidsCharge) {
-        Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
-//                .orElseThrow(() -> new ResourceNotFoundException("AGENT", "matriculeAgent", matriculeAgent));
-
-
-        Machine machine = machineRepo.findByCode(codeMachine);
-        if (machine == null) {
-            throw new ResourceNotFoundException("Machine", "code", codeMachine);
-        }
-
-        Lot lot = lotRepo.findByCodeLot(codeLot)
-                .orElseThrow(
-                        () -> new ResourceNotFoundException(
-                                "Lot", "code", codeLot
-                        )
-                );
-//
-//        if (machine.getCapaciteKg() != null
-//                && poidsCharge > machine.getCapaciteKg()) {
-//
-//            throw new RuntimeException("Capacité machine insuffisante");
-//        }
-
-        if (machine.getEtatImmobilisation() != EtatImmobilisation.DISPONIBLE) {
-            throw new RuntimeException("Machine indisponible");
-
-        }
-
-        if (poidsCharge == null) {
-            poidsCharge = lot.getPoidsBalance() != null ? lot.getPoidsBalance() : lot.getPoidsActuel();
-        }
-
-        ProgrammeLavage programme = suggestProgramme(lot.getCategorie());
-        CycleLavage cycle = CycleLavage.builder()
-                .machine(machine)
-                .programmeLavage(programme)
-                .personnelId(agent.getId())
-                .poidsCharge(poidsCharge)
-                .dateDebut(LocalDateTime.now())
-                .statut(StatutCycle.EN_COURS)
-                .build();
-        cycle = cycleRepo.save(cycle);
-        List<Linge> linges = lingeRepository.findByLot_CodeLot(codeLot);
-
-        for (Linge linge : linges) {
-            EtatLinge ancienEtat = linge.getEtat();
-            linge.setEtat(EtatLinge.EN_LAVAGE);
-            linge.setDureVie(linge.getDureVie()-1);
-            if (linge.getNbLavage() >= linge.getDureVie()) {
-
-                notificationService.notifierFinDeVie(linge);
-
-            }
-            HistoriqueLinge historique = HistoriqueLinge.builder()
-                    .linge(linge)
-                    .etatAvant(ancienEtat)
-                    .etatApres(EtatLinge.EN_LAVAGE)
-                    .personnelId(agent.getId())
-                    .typeOperation(TypeOperation.DEMARRAGE_LAVAGE)
-                    .dateOperation(LocalDateTime.now())
-                    .observations("Passage en lavage")
-                    .dateOperation(LocalDateTime.now())
-                    //.collecte(linge.getc())
-                    // .sacInfecte(linge.getSacInfecte())
-                    .build();
-            historiqueLingeRepository.save(historique);
-        }
-        mettreLingesEnLavage(codeLot);
-        addLotToCycleInternal(cycle, lot, poidsCharge);
-        //viderLot(lot);
-        machine.setEtatImmobilisation(EtatImmobilisation.EN_COURS);
-        lot.setEtat(EtatLot.EN_LAVAGE);
-        // lot.setPoidsActuel(0.0);
-        return cycle;
-    }
-    public CycleLavage addLotToCycle(Long cycleId,
-                                     String codeLot,
-                                     Double poidsCharge) {
-        CycleLavage cycle = cycleRepo.findById(cycleId)
-                .orElseThrow(() -> new ResourceNotFoundException("Cycle non trouvé"));
-        Lot lot = lotRepo.findByCodeLot(codeLot)
-                .orElseThrow(() -> new ResourceNotFoundException("Lot", "code", codeLot));
-        double nouveauPoids = cycle.getPoidsCharge() + poidsCharge;
-//        if (nouveauPoids > cycle.getMachine().getCapaciteKg()) {
-//            throw new RuntimeException("Capacité dépassée");
-//        }
-        List<Linge> linges  = lingeRepository.findByLot_CodeLot(codeLot);
-        //mettre a jours l'etat des  linges
-        mettreLingesEnLavage(codeLot);
-
-        cycle.setPoidsCharge(nouveauPoids);
-        addLotToCycleInternal(cycle, lot, poidsCharge);
-        return cycleRepo.save(cycle);
-    }
-    private void addLotToCycleInternal(CycleLavage cycle,
-                                       Lot lot,
-                                       Double poidsCharge) {
-        CycleLavageItem item = CycleLavageItem.builder()
-                .cycleLavage(cycle)
-                .typeSource(TypeSource.LOT_TRI)
-                .sourceId(lot.getId())
-                .poidsCharge(poidsCharge)
-                .quantiteChargee(null)
-                .build();
-        itemRepo.save(item);
-        //  mise à jour lot (consommation partielle)
-        //lot.setPoidsRestant(lot.getPoidsRestant() - poidsCharge);
-        lotRepo.save(lot);
-    }
-    @Transactional
     public CycleLavage finishCycle(Long cycleId) {
+        return finishCycle(cycleId, null);
+    }
+
+    /**
+     * Fin de cycle. Pour un cycle de désinfection (bac ou sac infecté) et si le séchage
+     * est actif, l'agent scanne le bac de déchargement : le bac devient le contenant
+     * des linges désinfectés (ou de leurs quantités) pour le séchage.
+     */
+    @Transactional
+    public CycleLavage finishCycle(Long cycleId, String codeBac) {
 
         CycleLavage cycle = cycleRepo.findById(cycleId)
                 .orElseThrow(() ->
@@ -230,96 +114,284 @@ public class CycleLavageService {
         List<CycleLavageItem> items =
                 itemRepo.findByCycleLavage(cycle);
 
+        List<Bac> bacsDechargement = new ArrayList<>();
+
         for (CycleLavageItem item : items) {
 
 
-            if (item.getTypeSource() == TypeSource.LOT_TRI) {
-
-                Lot lot = lotRepo.findById(item.getSourceId())
-                        .orElseThrow(() ->
-                                new ResourceNotFoundException(
-                                        "Lot introuvable"
-                                ));
-
-                List<Linge> linges =
-                        lingeRepository.findByLot_CodeLot(
-                                lot.getCodeLot()
-                        );
-
-                for (Linge linge : linges) {
-
-                    EtatLinge ancienEtat = linge.getEtat();
-
-                    linge.setEtat(EtatLinge.LAVE);
-                    linge.setNbLavage(
-                            linge.getNbLavage() + 1
-                    );
-
-                    historiqueLingeRepository.save(
-                            HistoriqueLinge.builder()
-                                    .linge(linge)
-                                    .etatAvant(ancienEtat)
-                                    .etatApres(EtatLinge.LAVE)
-                                    .personnelId(cycle.getPersonnelId())
-                                    .typeOperation(TypeOperation.FIN_LAVAGE)
-                                    .dateOperation(LocalDateTime.now())
-                                    .observations(
-                                            "Fin du cycle de lavage"
-                                    )
-                                    .build()
-                    );
-                }
-
-                lingeRepository.saveAll(linges);
-
-
-                lot.setEtat(EtatLot.PRET_SECHAGE);
-                lotRepo.save(lot);
+            if (item.getTypeSource() == TypeSource.BAC) {
+                terminerBacBlanc(item, cycle);
+                continue;
             }
 
-            // =====================================================
-            //  LAVAGE INFECTÉ : SOURCE = SAC_INFECTE
-            // =====================================================
-            else if (item.getTypeSource() == TypeSource.SAC_INFECTE) {
+            if (item.getTypeSource() == TypeSource.BAC_INFECTE) {
 
-                SacInfecte sac = sacInfecteRepository
-                        .findById(item.getSourceId())
+                Bac bac = bacRepository.findById(item.getSourceId())
                         .orElseThrow(() ->
                                 new ResourceNotFoundException(
-                                        "Sac infecté introuvable"
+                                        "Bac infecté introuvable"
                                 ));
 
-
-
-                // jusqu'à la vérification physique.
-                if (sac.getEtat() != EtatSac.EN_LAVAGE) {
+                if (bac.getEtat() != EtatBac.EN_LAVAGE) {
                     throw new BusinessException(
-                            "Le sac " + sac.getNumeroSac()
-                                    + " n'est pas EN_LAVAGE."
+                            "Le bac " + bac.getCode() + " n'est pas EN_LAVAGE."
                     );
                 }
 
-                sacInfecteRepository.save(sac);
+                List<Linge> lingesBac = lingeRepository.findByBacId(bac.getId());
+                terminerLingesInfectes(lingesBac, cycle, "bac " + bac.getCode(), cycle.getPersonnelId());
+
+                Bac bacSechage = null;
+                if (parcoursService.estActive(CodeEtape.SECHAGE)) {
+                    bacSechage = resoudreBacDechargement(codeBac, bacsDechargement);
+                    remplirBacDechargement(bacSechage, lingesBac, null,
+                            item.getPoidsCharge(), "BAC:" + bac.getCode());
+                }
+
+                // Déchargement : les linges quittent le bac (et rejoignent le lot scanné)
+                for (Linge linge : lingesBac) {
+                    linge.setBac(null);
+                    if (bacSechage != null) {
+                        linge.setBac(bacSechage);
+                    }
+                }
+                lingeRepository.saveAll(lingesBac);
+
+                bac.setEtat(EtatBac.VIDE);
+                bac.setPoids(null);
+                bacRepository.save(bac);
             }
         }
 
         machine.setEtatImmobilisation(EtatImmobilisation.DISPONIBLE);
         machineRepo.save(machine);
 
+        cubixMachineEtat.arreter(machine);
+
         return cycleRepo.save(cycle);
     }
 
 
 
-    //METHODE POUR METTRE A JOURS LES ETATS ES LINGES EN LAVAGE
-    private void mettreLingesEnLavage(String codeLot) {
-        List<Linge> linges = lingeRepository.findByLot_CodeLot(codeLot);
+    // ------------------------------------------------------------------
+    //  LAVAGE D'UN BAC DE TRI (circuit blanc)
+    // ------------------------------------------------------------------
 
+    public BacScanResponse scanBac(String codeBac) {
+        Bac bac = resoudreBacDeTri(codeBac);
+        SuggestionProgramme suggestion = resoudreProgramme(bac.getCategorie());
+        ProgrammeLavage programme = suggestion.programme();
+
+        return BacScanResponse.builder()
+                .codeBac(bac.getCode())
+                .categorie(bac.getCategorie())
+                .poids(bac.getPoids())
+                .poidsBalance(bac.getPoidsBalance())
+                .nbLinges(lingeRepository.findByBacId(bac.getId()).size())
+                .programmeId(programme.getId())
+                .programmeRecommande(programme.getNom())
+                .temperature(programme.getTemperatureCelsius())
+                .description(programme.getDescription())
+                .vitesse(programme.getVitesseEssorageRpm())
+                .duree(programme.getDureeMinutes())
+                .origineProgramme(suggestion.parDefaut() ? "DEFAUT" : "CATEGORIE")
+                .programmeParDefaut(suggestion.parDefaut())
+                .build();
+    }
+
+    @Transactional
+    public CycleLavage startCycleBac(String codeMachine,
+                                     String codeBac,
+                                     String matriculeAgent,
+                                     Double poidsCharge) {
+        Personnel agent = matriculeAgent == null ? null : personnelRepository.findByCodeBarre(matriculeAgent);
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
+        }
+
+        Machine machine = machineRepo.findByCode(codeMachine);
+        if (machine == null) {
+            throw new ResourceNotFoundException("Machine", "code", codeMachine);
+        }
+        if (machine.getEtatTechnique() == tn.softsys.buanderie.entity.enums.EtatTechniqueMachine.EN_PANNE
+                || machine.getEtatTechnique() == tn.softsys.buanderie.entity.enums.EtatTechniqueMachine.EN_COURS_DE_REPARATION) {
+            throw new BusinessException("La machine " + codeMachine + " est en panne : démarrage impossible.");
+        }
+        if (machine.getEtatImmobilisation() != EtatImmobilisation.DISPONIBLE) {
+            throw new BusinessException("La machine " + codeMachine + " n'est pas disponible.");
+        }
+
+        Bac bac = resoudreBacDeTri(codeBac);
+        exigerBacPretPourLavage(bac);
+
+        List<Linge> linges = lingeRepository.findByBacId(bac.getId());
+        if (linges.isEmpty()) {
+            throw new BusinessException("Le bac « " + bac.getCode() + " » ne contient aucun linge.");
+        }
+
+        double poids = poidsDuBac(bac, poidsCharge);
+        ProgrammeLavage programme = resoudreProgramme(bac.getCategorie()).programme();
+
+        CycleLavage cycle = cycleRepo.save(
+                CycleLavage.builder()
+                        .machine(machine)
+                        .programmeLavage(programme)
+                        .personnelId(agent.getId())
+                        .poidsCharge(poids)
+                        .dateDebut(LocalDateTime.now())
+                        .statut(StatutCycle.EN_COURS)
+                        .build());
+
+        mettreBacEnLavage(bac, linges, agent.getId());
+        ajouterBacAuCycle(cycle, bac, poids, linges.size());
+
+        machine.setEtatImmobilisation(EtatImmobilisation.EN_COURS);
+        machineRepo.save(machine);
+
+        cubixMachineEtat.demarrerLavage(machine, linges, programme.getDureeMinutes(), agent);
+
+        return cycle;
+    }
+
+    @Transactional
+    public CycleLavage addBacToCycle(Long cycleId, String codeBac, Double poidsCharge) {
+        CycleLavage cycle = cycleRepo.findById(cycleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cycle non trouvé"));
+        if (cycle.getStatut() != StatutCycle.EN_COURS) {
+            throw new BusinessException("Le cycle n'est pas en cours. État actuel : " + cycle.getStatut());
+        }
+
+        Bac bac = resoudreBacDeTri(codeBac);
+        exigerBacPretPourLavage(bac);
+
+        List<Linge> linges = lingeRepository.findByBacId(bac.getId());
+        if (linges.isEmpty()) {
+            throw new BusinessException("Le bac « " + bac.getCode() + " » ne contient aucun linge.");
+        }
+
+        double poids = poidsDuBac(bac, poidsCharge);
+
+        mettreBacEnLavage(bac, linges, cycle.getPersonnelId());
+
+        double nouveauPoids = cycle.getPoidsCharge() + poids;
+        cycle.setPoidsCharge(nouveauPoids);
+        ajouterBacAuCycle(cycle, bac, poids, linges.size());
+
+        return cycleRepo.save(cycle);
+    }
+
+    private Bac resoudreBacDeTri(String codeBac) {
+        if (codeBac == null || codeBac.isBlank()) {
+            throw new BusinessException("Le code du bac est obligatoire.");
+        }
+        String code = codeBac.trim();
+        Bac bac = bacRepository.findByCode(code)
+                .or(() -> bacRepository.findByRfidTag(code))
+                .orElseThrow(() -> new ResourceNotFoundException("Bac", "code", code));
+
+        if (bac.getUsage() != UsageBac.TRI) {
+            throw new BusinessException("Le bac « " + bac.getCode()
+                    + " » n'est pas un bac de tri (usage : " + bac.getUsage() + ").");
+        }
+        if (bac.getTypebac() == TypeBac.INFECTE) {
+            throw new BusinessException("Le bac « " + bac.getCode()
+                    + " » est infecté : il se lave par le lavage de désinfection.");
+        }
+        return bac;
+    }
+
+    private void exigerBacPretPourLavage(Bac bac) {
+        if (bac.getEtat() != EtatBac.EN_TRI && bac.getEtat() != EtatBac.PRET_LAVAGE) {
+            throw new BusinessException("Le bac « " + bac.getCode()
+                    + " » n'est pas prêt pour le lavage (état : " + bac.getEtat() + ").");
+        }
+    }
+
+    private double poidsDuBac(Bac bac, Double poidsCharge) {
+        if (poidsCharge != null) {
+            return poidsCharge;
+        }
+        if (bac.getPoidsBalance() != null) {
+            return bac.getPoidsBalance();
+        }
+        return bac.getPoids() != null ? bac.getPoids() : 0.0;
+    }
+
+    private void mettreBacEnLavage(Bac bac, List<Linge> linges, Long personnelId) {
         for (Linge linge : linges) {
+            EtatLinge ancienEtat = linge.getEtat();
             linge.setEtat(EtatLinge.EN_LAVAGE);
+
+            if (linge.getDureVie() != null && linge.getNbLavage() + 1 >= linge.getDureVie()) {
+                notificationService.notifierFinDeVie(linge);
+            }
+
+            historiqueLingeRepository.save(
+                    HistoriqueLinge.builder()
+                            .linge(linge)
+                            .etatAvant(ancienEtat)
+                            .etatApres(EtatLinge.EN_LAVAGE)
+                            .personnelId(personnelId)
+                            .typeOperation(TypeOperation.DEMARRAGE_LAVAGE)
+                            .dateOperation(LocalDateTime.now())
+                            .observations("Passage en lavage — bac " + bac.getCode())
+                            .build());
         }
         lingeRepository.saveAll(linges);
+
+        bac.setEtat(EtatBac.EN_LAVAGE);
+        bacRepository.save(bac);
     }
+
+    private void ajouterBacAuCycle(CycleLavage cycle, Bac bac, double poids, int quantite) {
+        itemRepo.save(
+                CycleLavageItem.builder()
+                        .cycleLavage(cycle)
+                        .typeSource(TypeSource.BAC)
+                        .sourceId(bac.getId())
+                        .poidsCharge(poids)
+                        .quantiteChargee(quantite)
+                        .build());
+    }
+
+    private void terminerBacBlanc(CycleLavageItem item, CycleLavage cycle) {
+        Bac bac = bacRepository.findById(item.getSourceId())
+                .orElseThrow(() -> new ResourceNotFoundException("Bac introuvable"));
+
+        List<Linge> linges = lingeRepository.findByBacId(bac.getId());
+
+        for (Linge linge : linges) {
+            EtatLinge ancienEtat = linge.getEtat();
+            linge.setEtat(EtatLinge.LAVE);
+            linge.setNbLavage(linge.getNbLavage() + 1);
+
+            historiqueLingeRepository.save(
+                    HistoriqueLinge.builder()
+                            .linge(linge)
+                            .etatAvant(ancienEtat)
+                            .etatApres(EtatLinge.LAVE)
+                            .personnelId(cycle.getPersonnelId())
+                            .typeOperation(TypeOperation.FIN_LAVAGE)
+                            .dateOperation(LocalDateTime.now())
+                            .observations("Fin du cycle de lavage")
+                            .build());
+        }
+
+        if (parcoursService.estActive(CodeEtape.SECHAGE)) {
+            lingeRepository.saveAll(linges);
+            bac.setEtat(EtatBac.EN_ATTENTE_SECHAGE);
+        } else {
+            for (Linge linge : linges) {
+                linge.setBac(null);
+            }
+            lingeRepository.saveAll(linges);
+            bac.setPoids(0.0);
+            bac.setPoidsBalance(null);
+            bac.setEtat(EtatBac.VIDE);
+        }
+        bacRepository.save(bac);
+    }
+
 //    private void historiserLavage(Linge linge, Agent agent, EtatLinge nouvelEtat) {
 //        HistoriqueLinge historique = HistoriqueLinge.builder()
 //                .linge(linge)
@@ -338,19 +410,6 @@ public class CycleLavageService {
 //        lingeRepository.save(linge);
 //    }
 
-    //methode pour vider le lots mis en lavage
-    @Transactional
-    public void viderLot(Lot lot) {
-        List<Linge> linges =
-                lingeRepository.findByLot_CodeLot(lot.getCodeLot());
-        for(Linge linge : linges) {
-            linge.setLot(null);
-            lingeRepository.save(linge);
-        }
-        lot.setPoidsActuel(0.0);
-        lot.setEtat(EtatLot.EN_LAVAGE);
-        lotRepo.save(lot);
-    }
     public List<CycleLavage> getAllCycles() {
         return cycleRepo.findAllByOrderByDateDebutDesc();
     }
@@ -369,7 +428,12 @@ public class CycleLavageService {
         for (CycleLavageItem item : items) {
             if (item.getSourceId() == null) continue;
 
-            List<Linge> linges = lingeRepository.findByLot_Id(item.getSourceId());
+            List<Linge> linges;
+            if (item.getTypeSource() == TypeSource.BAC_INFECTE || item.getTypeSource() == TypeSource.BAC) {
+                linges = lingeRepository.findByBacId(item.getSourceId());
+            } else {
+                linges = new ArrayList<>();
+            }
 
             for (Linge l : linges) {
                 Map<String, Object> m = new java.util.LinkedHashMap<>();
@@ -379,7 +443,7 @@ public class CycleLavageService {
                 m.put("categorie", l.getCategorie() != null ? l.getCategorie().name() : null);
                 m.put("etat",      l.getEtat() != null ? l.getEtat().name() : null);
                 m.put("poids",     l.getPoids());
-                m.put("lotId",     item.getSourceId());
+                m.put("bacId",     item.getSourceId());
                 m.put("itemId",    item.getId());
                 result.add(m);
             }
@@ -393,107 +457,92 @@ public class CycleLavageService {
     //===========================================================//
 
 
+
+    // ------------------------------------------------------------------
+    //  LAVAGE DIRECT D'UN BAC INFECTÉ
+    // ------------------------------------------------------------------
+
     @Transactional
-    public CycleLavage startCycleSacInfecte(
+    public CycleLavage startCycleBacInfecte(
             String codeMachine,
-            String numeroSac,
-            String matriculeAgent) {
+            String codeBac,
+            String matriculeAgent,
+            Double poidsCharge) {
+
         profilExploitationService.exigerCircuitInfecte();
 
+        Personnel agent = personnelRepository.findByCodeBarre(matriculeAgent);
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", matriculeAgent);
+        }
 
-        // Agent
-        // Agent agent = agentRepository.findByMatricule(matriculeAgent)
-        PersonnelDto agent = personnelReferentielService.getByCode(matriculeAgent);
+        Bac bac = bacRepository.findByCode(codeBac)
+                .or(() -> bacRepository.findByRfidTag(codeBac))
+                .orElseThrow(() -> new ResourceNotFoundException("Bac", "code", codeBac));
 
-//                .orElseThrow(() ->
-//                        new ResourceNotFoundException(
-//                                "AGENT",
-//                                "matriculeAgent",
-//                                matriculeAgent
-//                        ));
+        if (bac.getTypebac() != TypeBac.INFECTE) {
+            throw new BusinessException("Le bac " + bac.getCode() + " n'est pas un bac infecté.");
+        }
 
-        // Sac
-        SacInfecte sac = sacInfecteRepository
-                .findByNumeroSac(numeroSac)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "SacInfecte",
-                                "numeroSac",
-                                numeroSac
-                        ));
-
-        // Vérification état
-        if (sac.getEtat() != EtatSac.RECEPTIONNE) {
+        if (bac.getEtat() != EtatBac.EN_RECEPTION) {
             throw new BusinessException(
-                    "Le sac doit être RECEPTIONNE. État actuel : "
-                            + sac.getEtat()
-            );
+                    "Le bac doit être EN_RECEPTION (état actuel : " + bac.getEtat()
+                            + "). Réceptionnez-le d'abord.");
         }
 
-        // Machine
+        List<Linge> linges = lingeRepository.findByBacId(bac.getId());
+        if (linges.isEmpty()) {
+            throw new BusinessException(
+                    "Le bac " + bac.getCode() + " ne contient aucun linge déclaré.");
+        }
+
         Machine machine = machineRepo.findByCode(codeMachine);
-
         if (machine == null) {
-            throw new ResourceNotFoundException(
-                    "Machine",
-                    "code",
-                    codeMachine
-            );
+            throw new ResourceNotFoundException("Machine", "code", codeMachine);
         }
-
+        if (machine.getEtatTechnique() == tn.softsys.buanderie.entity.enums.EtatTechniqueMachine.EN_PANNE
+                || machine.getEtatTechnique() == tn.softsys.buanderie.entity.enums.EtatTechniqueMachine.EN_COURS_DE_REPARATION) {
+            throw new BusinessException("La machine " + codeMachine + " est en panne : démarrage impossible.");
+        }
         if (machine.getEtatImmobilisation() != EtatImmobilisation.DISPONIBLE) {
             throw new BusinessException(
-                    "La machine " + codeMachine +
-                            " n'est pas disponible."
-            );
+                    "La machine " + codeMachine + " n'est pas disponible.");
         }
 
-        // Programme automatique de désinfection
-        ProgrammeLavage programmeDesinfection =
-                programmeRepo.findByNom("DESINFECTION_INFECTE")
-                        .orElseThrow(() ->
-                                new BusinessException(
-                                        "Le programme DESINFECTION_INFECTE " +
-                                                "est introuvable."
-                                ));
+        ProgrammeLavage programme = programmeDesinfection();
 
-        // Création du cycle
-        CycleLavage cycle = CycleLavage.builder()
-                .machine(machine)
-                //.agent(agent)
-                .programmeLavage(programmeDesinfection)
-                .dateDebut(LocalDateTime.now())
-                .statut(StatutCycle.EN_COURS)
-                .poidsCharge(0.0)
-                .build();
+        double poids = poidsCharge != null
+                ? poidsCharge
+                : (bac.getPoids() != null ? bac.getPoids() : 0.0);
 
-        cycle = cycleRepo.save(cycle);
+        CycleLavage cycle = cycleRepo.save(
+                CycleLavage.builder()
+                        .machine(machine)
+                        .programmeLavage(programme)
+                        .personnelId(agent.getId())
+                        .poidsCharge(poids)
+                        .dateDebut(LocalDateTime.now())
+                        .statut(StatutCycle.EN_COURS)
+                        .build());
 
-        // Le cycle contient le SAC, pas les linges
-        CycleLavageItem item = CycleLavageItem.builder()
-                .cycleLavage(cycle)
-                .typeSource(TypeSource.SAC_INFECTE)
-                .sourceId(sac.getId())
-                .quantiteChargee(sac.getQuantiteDeclaree())
-                .build();
+        itemRepo.save(
+                CycleLavageItem.builder()
+                        .cycleLavage(cycle)
+                        .typeSource(TypeSource.BAC_INFECTE)
+                        .sourceId(bac.getId())
+                        .poidsCharge(poids)
+                        .quantiteChargee(linges.size())
+                        .build());
 
-        itemRepo.save(item);
-
-        // Machine occupée
         machine.setEtatImmobilisation(EtatImmobilisation.EN_COURS);
         machineRepo.save(machine);
+        cubixMachineEtat.demarrerLavage(machine, linges, programme.getDureeMinutes(), agent);
 
-        // Sac en lavage
-        sac.setEtat(EtatSac.EN_LAVAGE);
-        sac.setDateLavage(LocalDateTime.now());
-        //  sac.setAgentLavage(agent);
-        sac.setCycleLavage(cycle);
+        bac.setEtat(EtatBac.EN_LAVAGE);
+        bacRepository.save(bac);
 
-        sacInfecteRepository.save(sac);
-        for (Linge linge : sac.getLinges()) {
-
+        for (Linge linge : linges) {
             EtatLinge avant = linge.getEtat();
-
             linge.setEtat(EtatLinge.INFECTE_EN_LAVAGE);
             lingeRepository.save(linge);
 
@@ -502,17 +551,141 @@ public class CycleLavageService {
                             .linge(linge)
                             .etatAvant(avant)
                             .etatApres(EtatLinge.INFECTE_EN_LAVAGE)
-                            .personnelId(agent != null ? agent.getId() : sac.getPersonnelId())
-                            .typeOperation(TypeOperation.LAVAGE_SAC_INFECTE)
+                            .personnelId(agent.getId())
+                            .typeOperation(TypeOperation.DEMARRAGE_LAVAGE)
                             .dateOperation(LocalDateTime.now())
-                            .sacInfecte(sac)
-                            .collecte(sac.getCollecte())
-                            .observations("Mise en lavage — sac " + sac.getNumeroSac()
+                            .observations("Désinfection — bac " + bac.getCode()
                                     + " — machine " + codeMachine)
-                            .build()
-            );
+                            .build());
         }
 
         return cycle;
     }
+
+    /**
+     * Bac de déchargement scanné par l'agent : un bac de tri disponible (VIDE) et vide.
+     */
+    private Bac resoudreBacDechargement(String codeBac, List<Bac> dejaUtilises) {
+
+        if (codeBac == null || codeBac.isBlank()) {
+            throw new BusinessException(
+                    "Scannez le bac de déchargement pour terminer ce cycle de désinfection.");
+        }
+        if (!dejaUtilises.isEmpty()) {
+            throw new BusinessException(
+                    "Un seul bac de déchargement est accepté pour ce cycle.");
+        }
+
+        String code = codeBac.trim();
+        Bac bac = bacRepository.findByCode(code)
+                .or(() -> bacRepository.findByRfidTag(code))
+                .orElseThrow(() -> new ResourceNotFoundException("Bac", "code", code));
+
+        if (bac.getUsage() != UsageBac.TRI || bac.getTypebac() == TypeBac.INFECTE) {
+            throw new BusinessException(
+                    "Le bac " + bac.getCode() + " n'est pas un bac de tri blanc : "
+                            + "scannez un bac de déchargement.");
+        }
+        if (bac.getEtat() != EtatBac.VIDE) {
+            throw new BusinessException(
+                    "Le bac " + bac.getCode() + " n'est pas disponible (état : "
+                            + bac.getEtat() + "). Scannez un bac vide.");
+        }
+
+        boolean contientDesLinges = !lingeRepository.findByBacId(bac.getId()).isEmpty();
+        boolean porteDesQuantites = bac.getQuantiteDeclaree() != null && bac.getQuantiteDeclaree() > 0;
+        if (contientDesLinges || porteDesQuantites) {
+            throw new BusinessException(
+                    "Le bac " + bac.getCode() + " n'est pas vide. Scannez un bac vide.");
+        }
+
+        dejaUtilises.add(bac);
+        return bac;
+    }
+
+    private void remplirBacDechargement(Bac bac,
+                                        List<Linge> linges,
+                                        Map<CategLinge, Integer> quantitesDeclarees,
+                                        Double poids,
+                                        String source) {
+
+        Map<CategLinge, Integer> parCategorie = new EnumMap<>(CategLinge.class);
+        int total;
+
+        if (linges != null && !linges.isEmpty()) {
+            for (Linge linge : linges) {
+                if (linge.getCategorie() != null) {
+                    parCategorie.merge(linge.getCategorie(), 1, Integer::sum);
+                }
+            }
+            total = linges.size();
+        } else {
+            if (quantitesDeclarees != null) {
+                parCategorie.putAll(quantitesDeclarees);
+            }
+            total = parCategorie.values().stream().mapToInt(Integer::intValue).sum();
+        }
+
+        double p = poids != null ? poids : 0.0;
+
+        if (bac.getCapacite_max() != null && p > bac.getCapacite_max()) {
+            throw new BusinessException(
+                    "Le poids à décharger (" + p + " kg) dépasse la capacité du bac "
+                            + bac.getCode() + " (" + bac.getCapacite_max() + " kg). "
+                            + "Scannez un bac plus grand.");
+        }
+
+        CategLinge dominante = parCategorie.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
+
+        String detail = parCategorie.entrySet().stream()
+                .map(e -> e.getKey().name() + " : " + e.getValue())
+                .collect(Collectors.joining(", "));
+        if (detail.length() > 300) {
+            detail = detail.substring(0, 297) + "...";
+        }
+
+        bac.setCategorie(dominante);
+        bac.setEtat(EtatBac.EN_ATTENTE_SECHAGE);
+        bac.setPoids(p);
+        bac.setPoidsBalance(p > 0 ? p : null);
+        bac.setSource(source);
+        bac.setQuantiteDeclaree(total);
+        bac.setDetailQuantites(detail);
+        bacRepository.save(bac);
+    }
+
+    /** Programme de désinfection : DESINFECTION_INFECTE, sinon le premier de type DESINFECTION. */
+    private ProgrammeLavage programmeDesinfection() {
+        return programmeRepo.findByNom("DESINFECTION_INFECTE")
+                .or(() -> programmeRepo.findFirstByType(TypeProgramme.DESINFECTION))
+                .orElseThrow(() -> new BusinessException(
+                        "Aucun programme de désinfection n'est défini (type DESINFECTION)."));
+    }
+
+    /** Fin de désinfection : les linges deviennent LAVE, avec historique. */
+    private void terminerLingesInfectes(List<Linge> linges, CycleLavage cycle, String origine, Long personnelIdSecours) {
+        for (Linge linge : linges) {
+            EtatLinge avant = linge.getEtat();
+            linge.setEtat(EtatLinge.LAVE);
+            linge.setNbLavage(linge.getNbLavage() + 1);
+            historiqueLingeRepository.save(
+                    HistoriqueLinge.builder()
+                            .linge(linge)
+                            .etatAvant(avant)
+                            .etatApres(EtatLinge.LAVE)
+                            .personnelId(cycle.getPersonnelId() != null
+                                    ? cycle.getPersonnelId()
+                                    : personnelIdSecours)
+                            .typeOperation(TypeOperation.FIN_LAVAGE)
+                            .dateOperation(LocalDateTime.now())
+                            .observations("Fin de désinfection — " + origine)
+                            .build());
+        }
+    }
+
+
+
 }

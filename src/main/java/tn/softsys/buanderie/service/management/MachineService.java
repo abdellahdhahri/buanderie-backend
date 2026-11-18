@@ -64,20 +64,42 @@ public class MachineService {
         return machineRepository.save(machine);
     }
 
+    /**
+     * Modifie les champs internes d'une machine : seuls les champs fournis changent. Pour une machine importée de
+     * CUBIX, le code, la désignation et le type (laveur / séchoir) appartiennent à CUBIX et ne sont pas modifiés ici.
+     */
+    @Transactional
     public Machine modifier(Long id, Machine data) {
 
         Machine m = findById(id);
+        boolean externe = m.getSource() == tn.softsys.buanderie.entity.enums.SourceDonnee.EXTERNE;
 
-        m.setMarque(data.getMarque());
-        m.setCapaciteKg(data.getCapaciteKg());
-        m.setLocalisation(data.getLocalisation());
-        m.setEtatImmobilisation(data.getEtatImmobilisation());
-
-        if (data.getType() != null) {
-            m.setType(data.getType());
+        if (data.getMarque() != null) {
+            m.setMarque(data.getMarque());
+        }
+        if (data.getCapaciteKg() != null) {
+            m.setCapaciteKg(data.getCapaciteKg());
+        }
+        if (data.getLocalisation() != null) {
+            m.setLocalisation(data.getLocalisation());
+        }
+        if (data.getNom() != null) {
+            m.setNom(data.getNom());
+        }
+        if (data.getDescription() != null) {
+            m.setDescription(data.getDescription());
+        }
+        if (data.getCategorie() != null) {
+            m.setCategorie(data.getCategorie());
+        }
+        if (data.getEtatImmobilisation() != null) {
+            m.setEtatImmobilisation(data.getEtatImmobilisation());
         }
         if (data.getEtatTechnique() != null) {
             m.setEtatTechnique(data.getEtatTechnique());
+        }
+        if (!externe && data.getType() != null) {
+            m.setType(data.getType());
         }
 
         return machineRepository.save(m);

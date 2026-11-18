@@ -143,10 +143,40 @@ public class SynchronisationEmplacementsService {
                 ? connecteur.recupererListePaginee(url, config, endpoint.getCheminListe(), TAILLE_PAGE, pagesMax)
                 : connecteur.recupererListe(url, config, endpoint.getCheminListe());
 
+        if (urlSansParametres(url).toLowerCase().endsWith("/buanderieapi/arsenaux")) {
+            elements = aplatirEmplacements(elements);
+        }
+
         return elements.stream()
                 .map(e -> convertir(e, champs))
                 .filter(d -> d.idExterne != null)
                 .toList();
+    }
+
+    private String urlSansParametres(String url) {
+        int fin = url.indexOf('?');
+        return fin >= 0 ? url.substring(0, fin) : url;
+    }
+
+    /** API CUBIX Arsenaux : les emplacements sont imbriqués ; on en fait une liste à plat avec l'id de l'arsenal parent. */
+    private List<JsonNode> aplatirEmplacements(List<JsonNode> arsenaux) {
+        List<JsonNode> resultat = new java.util.ArrayList<>();
+        for (JsonNode arsenal : arsenaux) {
+            JsonNode liste = arsenal.get("emplacements");
+            if (liste == null || !liste.isArray()) {
+                continue;
+            }
+            for (JsonNode emplacement : liste) {
+                com.fasterxml.jackson.databind.node.ObjectNode plat =
+                        com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode();
+                if (emplacement.isObject()) {
+                    plat.setAll((com.fasterxml.jackson.databind.node.ObjectNode) emplacement);
+                }
+                plat.set("arsenalId", arsenal.get("id"));
+                resultat.add(plat);
+            }
+        }
+        return resultat;
     }
 
     private DonneeEmplacement convertir(JsonNode element, Map<String, String> champs) {

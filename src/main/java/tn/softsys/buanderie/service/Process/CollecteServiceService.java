@@ -1,5 +1,13 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.service.management.BacInfecteService;
+
+import tn.softsys.buanderie.dto.BacInfecteRequest;
+
+import tn.softsys.buanderie.dto.BacInfecteItemRequest;
+
+import tn.softsys.buanderie.dto.BacInfecteDTO;
+
 import tn.softsys.buanderie.entity.enums.NiveauRattachement;
 
 import tn.softsys.buanderie.service.referentiel.ChambreLitReferentielService;
@@ -18,12 +26,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tn.softsys.buanderie.repository.PersonnelRepository;
 import tn.softsys.buanderie.entity.Personnel;
-import tn.softsys.buanderie.dto.SacsInfectes.*;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
 import tn.softsys.buanderie.exception.*;
 import tn.softsys.buanderie.repository.*;
-import tn.softsys.buanderie.service.management.SacInfecteService;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -38,13 +44,13 @@ public class CollecteServiceService {
 
     private final LingeRepository                lingeRepo;
     private final AgentRepository                agentRepo;
-    private final ServiceRepository     sqlServiceRepo;
+    private final ServiceRepository     serviceRepository;
     private final BacRepository                  bacRepo;
     private final CollecteRepository             collecteRepo;
     private final CollecteLingeRepository        collecteLingeRepo;
     private final HistoriqueLingeRepository      historiqueRepo;
-    private final SacInfecteRepository           sacInfecteRepo;
-    private final SacInfecteService              sacInfecteService;
+    private final BacQuantiteRepository bacQuantiteRepo;
+    private final BacInfecteService bacInfecteService;
     private final ProfilExploitationService profilExploitationService;
     private final PersonnelRepository personnelReo;
     private final ObjectMapper objectMapper;
@@ -178,7 +184,7 @@ public class CollecteServiceService {
             throw new BusinessException("Chambre introuvable : " + codeChambre);
         }
 
-        List<Linge> attendus = lingeRepo.findByChambreIdSqlServerAndEtat(chambre.getId(), EtatLinge.LIVRE);
+        List<Linge> attendus = lingeRepo.findByChambreIdAndEtat(chambre.getId(), EtatLinge.LIVRE);
         if (attendus.isEmpty()) {
             throw new BusinessException("Aucun linge livré à collecter pour cette chambre");
         }
@@ -208,7 +214,7 @@ public class CollecteServiceService {
         Collecte collecte = Collecte.builder()
                 .personnelId(personnel.getId())
                 .service(chambre.getServiceId())
-                .chambreIdSqlServer(chambre.getId())
+                .chambreId(chambre.getId())
                 .codeChambre(chambre.getCode())
                 .typeCollecte(TypeCollecte.MIXTE)
                 .etatCollecte(EtatCollecte.EN_TRAITEMENT)
@@ -299,9 +305,9 @@ public class CollecteServiceService {
         l.setEtat(EtatLinge.COLLECTE);
         l.setStatutCollecte(StatutCollecteLinge.BLANC);
         l.setTypeCollecte(TypeCollecte.BLANC);
-        if (c.getChambreIdSqlServer() != null) {
-            l.setChambreIdSqlServer(null);
-            l.setLitIdSqlServer(null);
+        if (c.getChambreId() != null) {
+            l.setChambreId(null);
+            l.setLitId(null);
         }
 //        l.setServiceId(null);
         lingeRepo.save(l);
@@ -335,9 +341,9 @@ public class CollecteServiceService {
 
 
     @Transactional
-    public SacInfecteDTO declarerSacInfecte(
+    public BacInfecteDTO declarerQuantitesInfectes(
             Long collecteId,
-            SacInfecteRequest request) {
+            BacInfecteRequest request) {
         profilExploitationService.exigerCircuitInfecte();
 
 
@@ -376,8 +382,13 @@ public class CollecteServiceService {
         }
 
         /*
-         * Vérification du bac.
+         * Vérification du bac : le bac infecté qui reçoit les quantités.
          */
+        if (request.getBacId() == null) {
+            throw new BusinessException(
+                    "Scannez le bac infecté qui reçoit ces quantités."
+            );
+        }
         if (request.getBacId() != null) {
 
             Bac bac = bacRepo.findById(request.getBacId())
@@ -403,7 +414,7 @@ public class CollecteServiceService {
                 request.getItems()
                         .stream()
                         .collect(Collectors.groupingBy(
-                                SacInfecteItemRequest::getCategorie,
+                                BacInfecteItemRequest::getCategorie,
                                 () -> new EnumMap<>(CategLinge.class),
                                 Collectors.summingLong(
                                         item -> {
@@ -484,8 +495,8 @@ public class CollecteServiceService {
          *
          * On délègue maintenant la création du sac.
          */
-        return sacInfecteService
-                .declarerSacInfecte(request, c);
+        return bacInfecteService
+                .declarerQuantites(request, c);
     }
     //  PROPRE — linge laissé en place (ne part pas en lavage)
     @Transactional
@@ -537,13 +548,14 @@ public class CollecteServiceService {
         List<CollecteLinge> lignes = collecteLingeRepo.findByCollecte_Id(collecteId);
 
         // Compter aussi les sacs infectés déclarés sur cette collecte
-        long nbSacs = sacInfecteRepo.findByCollecte_Id(collecteId).size();
+        long nbSacs = bacQuantiteRepo.findByCollecteId(collecteId).stream()
+                .map(q -> q.getBac().getId()).distinct().count();
 
         //  Collecte vide = 0 linge scanné ET 0 sac infecté déclaré
         if (lignes.isEmpty() && nbSacs == 0)
             throw new BusinessException(
                     "Impossible de clôturer : aucune action enregistrée. "
-                            + "Scannez au moins un linge ou déclarez un sac infecté.");
+                            + "Scannez au moins un linge ou déclarez des quantités infectées.");
 
         long b = cnt(lignes, TypeCollecte.BLANC);
         long i = cnt(lignes, TypeCollecte.INFECTE);
@@ -551,10 +563,8 @@ public class CollecteServiceService {
         long m = cnt(lignes, TypeCollecte.MANQUANT);
 
         // Total infectés = lignes INFECTE + quantités dans sacs infectés
-        long qteInfectes = sacInfecteRepo.findByCollecte_Id(collecteId).stream()
-                .mapToLong(sac -> sac.getItems() != null
-                        ? sac.getItems().stream().mapToLong(si -> si.getQuantiteDeclaree()).sum()
-                        : 0L)
+        long qteInfectes = bacQuantiteRepo.findByCollecteId(collecteId).stream()
+                .mapToLong(q -> q.getQuantiteDeclaree() != null ? q.getQuantiteDeclaree() : 0L)
                 .sum();
 
         c.setNbScannésBlanc((int) b);
@@ -570,7 +580,7 @@ public class CollecteServiceService {
                 "serviceId",    c.getService() != null ? c.getService() : 0L,
                 "nbBlancs",     b,
                 "nbInfectes",   i + qteInfectes,
-                "nbSacsInfectes", nbSacs,
+                "nbBacsInfectes", nbSacs,
                 "nbPropres",    p,
                 "nbManquants",  m
         );
@@ -660,30 +670,17 @@ public class CollecteServiceService {
         }
 
 
-        List<SacInfecte> sacs =
-                sacInfecteRepo.findByCollecte_Id(collecteId);
+        for (BacQuantite q : bacQuantiteRepo.findByCollecteId(collecteId)) {
 
-        for (SacInfecte sac : sacs) {
-
-            if (sac.getItems() == null) {
+            if (q.getCategorie() == null || q.getQuantiteDeclaree() == null) {
                 continue;
             }
 
-            for (SacInfecteItem item : sac.getItems()) {
-
-                if (item.getCategorie() == null) {
-                    continue;
-                }
-
-                long quantite =
-                        item.getQuantiteDeclaree();
-
-                result.merge(
-                        item.getCategorie(),
-                        quantite,
-                        Long::sum
-                );
-            }
+            result.merge(
+                    q.getCategorie(),
+                    (long) q.getQuantiteDeclaree(),
+                    Long::sum
+            );
         }
 
         return result;
@@ -744,7 +741,7 @@ public class CollecteServiceService {
     private Optional<ServiceEntity> resolveService(Long serviceId, String refOuCode) {
 
         if (serviceId != null) {
-            return sqlServiceRepo.findById(serviceId);
+            return serviceRepository.findById(serviceId);
 //                    .orElseThrow(() ->
 //                            new BusinessException(
 //                                    "Service introuvable avec l'id : " + serviceId
@@ -760,7 +757,7 @@ public class CollecteServiceService {
 
         String valeur = refOuCode.trim();
 
-        return sqlServiceRepo
+        return serviceRepository
                 .findByReferenceIgnoreCaseOrCodeIgnoreCase(valeur, valeur);
 //                .orElseThrow(() ->
 //                        new BusinessException(

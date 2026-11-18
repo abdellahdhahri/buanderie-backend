@@ -1,5 +1,11 @@
 package tn.softsys.buanderie.service;
 
+import tn.softsys.buanderie.service.referentiel.CubixClient;
+
+import tn.softsys.buanderie.security.CubixTokenStore;
+
+import tn.softsys.buanderie.exception.BusinessException;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -25,154 +31,75 @@ public class AuthService {
     private final RestTemplate restTemplate = new RestTemplate();
 
     private final JwtService jwtService;
+    private final CubixClient cubixClient;
+    private final CubixTokenStore cubixTokens;
 
-
-    public AuthService(JwtService jwtService) {
+    public AuthService(JwtService jwtService, CubixClient cubixClient, CubixTokenStore cubixTokens) {
         this.jwtService = jwtService;
+        this.cubixClient = cubixClient;
+        this.cubixTokens = cubixTokens;
     }
 
 
 
+    /**
+     * Connexion avec un compte CUBIX : Login/Mobile donne un jeton, gardé côté serveur pour cet utilisateur
+     * (il sert ensuite aux appels d'intégration). L'identité vient de Ping, les droits des étapes où la
+     * personne est habilitée (Etapes). Le navigateur ne reçoit que le JWT de cette application.
+     */
     public LoginResponseDTO login(String login, String password) {
 
-
         if (login == null || login.isBlank()) {
-            throw new RuntimeException("Login obligatoire");
+            throw new BusinessException("Login obligatoire");
         }
-
         if (password == null || password.isBlank()) {
-            throw new RuntimeException("Mot de passe obligatoire");
+            throw new BusinessException("Mot de passe obligatoire");
         }
 
-        String loginUrl = baseUrl + "/Login/CheckUser";
+        String identifiant = login.trim();
+        CubixClient.Connexion connexion = cubixClient.seConnecter(identifiant, password);
+        String jeton = connexion.jeton();
 
-        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("Login", login);
-        form.add("Password", password);
-        form.add("touch", "false");
+        CubixClient.Identite identite = cubixClient.ping(jeton);
+        List<CubixClient.Etape> etapes = cubixClient.etapes(jeton);
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
-        HttpEntity<MultiValueMap<String, String>> request =
-                new HttpEntity<>(form, headers);
-
-        ResponseEntity<Map> response;
-
-        try {
-            response = restTemplate.exchange(
-                    loginUrl,
-                    HttpMethod.POST,
-                    request,
-                    Map.class
-            );
-
-        } catch (Exception e) {
-            throw new RuntimeException(
-                    "Erreur lors de l'authentification ASP.NET",
-                    e
-            );
+        boolean admin = identite.administrateur();
+        List<CubixClient.Etape> habilitees = etapesHabilitees(admin, identite.id(), etapes);
+        List<String> privileges = connexion.privileges();
+        List<Map<String, Object>> etapesDto = new ArrayList<>();
+        for (CubixClient.Etape e : habilitees) {
+            Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("id", e.id());
+            m.put("nom", e.nom());
+            m.put("categorie", e.categorie());
+            etapesDto.add(m);
         }
 
-        Map data = response.getBody();
+        cubixTokens.enregistrer(identifiant, jeton);
 
-        if (data == null) {
-            throw new RuntimeException("Réponse ASP.NET vide");
-        }
-
-        Boolean success = (Boolean) data.get("success");
-
-        if (!Boolean.TRUE.equals(success)) {
-            throw new RuntimeException("Login ou mot de passe incorrect");
-        }
-
-        Long userId = null;
-
-        if (data.get("idUser") != null) {
-            userId = ((Number) data.get("idUser")).longValue();
-        }
-
-        String username = data.get("username") != null
-                ? data.get("username").toString()
-                : null;
-
-        String nom = data.get("nom") != null
-                ? data.get("nom").toString()
-                : "";
-
-        String prenom = data.get("prenom") != null
-                ? data.get("prenom").toString()
-                : "";
-
-        String nomPrenom = (prenom + " " + nom).trim();
-
-
-        String codeBarre = data.get("codeBarre") != null
-                ? data.get("codeBarre").toString()
-                : null;
-
-
-        List<String> privileges = new ArrayList<>();
-
-        Object privilegesObject = data.get("privilieges");
-
-        if (privilegesObject instanceof List) {
-
-            for (Object privilege : (List<?>) privilegesObject) {
-
-                if (privilege == null) {
-                    continue;
-                }
-
-                String code = privilege.toString().trim();
-
-                if (!code.isEmpty() && !privileges.contains(code)) {
-                    privileges.add(code);
-                }
-            }
-        }
-
-        boolean admin = false;
-
-        boolean hasBuanderieAccess =
-                admin || privileges.contains("LIG0");
-
-        if (!hasBuanderieAccess) {
-            throw new RuntimeException(
-                    "Accès refusé au module Buanderie"
-            );
-        }
-
-
-        UserDTO userDTO = new UserDTO(
-                userId,
-                username,
-                nomPrenom,
-                codeBarre,
-                null,
-                null
-        );
-
-        SecurityUser securityUser =
-                new SecurityUser(
-                        username,
-                        admin,
-                        privileges
-                );
-
+        UserDTO userDTO = new UserDTO(identite.id(), identifiant, identite.nom(), identite.codeBarre(), null, null);
+        SecurityUser securityUser = new SecurityUser(identifiant, admin, privileges);
         String token = jwtService.generateToken(securityUser);
 
-        return new LoginResponseDTO(
-                token,
-                username,
-                admin,
-                privileges,
-                codeBarre,
-                userDTO
-        );
+        LoginResponseDTO reponse = new LoginResponseDTO(token, identifiant, admin, privileges, identite.codeBarre(), userDTO);
+        reponse.setEtapes(etapesDto);
+        return reponse;
     }
 
+    public void logout(String login) {
+        cubixTokens.retirer(login);
+    }
 
+    /** Étapes où la personne est habilitée (PersonnelLinge_Etape) ; un administrateur les a toutes. */
+    private List<CubixClient.Etape> etapesHabilitees(boolean admin, Long personnelId, List<CubixClient.Etape> etapes) {
+        List<CubixClient.Etape> res = new ArrayList<>();
+        for (CubixClient.Etape e : etapes) {
+            if (admin || (personnelId != null && e.personnelIds().contains(personnelId))) {
+                res.add(e);
+            }
+        }
+        return res;
+    }
 
     //login par badge
 

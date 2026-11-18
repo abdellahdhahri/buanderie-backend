@@ -21,7 +21,6 @@ public interface HistoriqueLingeRepository extends JpaRepository<HistoriqueLinge
 
     List<HistoriqueLinge> findByCollecte_IdOrderByDateOperationDesc(Long collecteId);
 
-    List<HistoriqueLinge> findBySacInfecte_NumeroSacOrderByDateOperationDesc(String numeroSac);
 
 
     List<HistoriqueLinge> findByDateOperationBetweenOrderByDateOperationDesc(

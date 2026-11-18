@@ -1,5 +1,7 @@
 package tn.softsys.buanderie.service.management;
 
+import tn.softsys.buanderie.service.referentiel.CubixArsenalImportService;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -29,6 +31,7 @@ public class EmplacementService {
     private final ArsenalRepository arsenalRepository;
     private final LingeArsenalRepository lingeArsenalRepository;
     private final IntegrationService integrationService;
+    private final CubixArsenalImportService cubixArsenalImportService;
 
     @Transactional(readOnly = true)
     public List<EmplacementDetailDTO> lister(Long arsenalId, boolean tous) {
@@ -82,6 +85,10 @@ public class EmplacementService {
 
     @Transactional
     public EmplacementDetailDTO creer(EmplacementDetailDTO dto) {
+        if (cubixArsenalImportService.actif()) {
+            // Mode CUBIX : l'emplacement est créé dans CUBIX (AjouterEmplacements) puis relu ici
+            return cubixArsenalImportService.creerEmplacement(dto);
+        }
         if (integrationService.estImporte(Referentiel.EMPLACEMENT)) {
             throw new BusinessException(
                     "Les emplacements sont importés depuis le système externe : ajoutez-les dans le système source.");

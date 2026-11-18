@@ -24,18 +24,8 @@ public interface MachineRepository extends JpaRepository<Machine, Long> {
     );
 
     Machine findByCode(String code);
-    Optional<Machine> findByLegacyLotArticleImmobilisationId(Long id);
 
     List<Machine> findBySource(SourceDonnee source);
-
-    @Modifying
-    @Query("UPDATE Machine m SET m.source = :source, m.idExterne = CAST(m.legacyLotArticleImmobilisationId AS String) "
-            + "WHERE m.source IS NULL AND m.legacyLotArticleImmobilisationId IS NOT NULL")
-    int migrerMachinesImportees(@Param("source") SourceDonnee source);
-
-    @Modifying
-    @Query("UPDATE Machine m SET m.source = :source WHERE m.source IS NULL")
-    int definirSourceManquante(@Param("source") SourceDonnee source);
 
 }
 

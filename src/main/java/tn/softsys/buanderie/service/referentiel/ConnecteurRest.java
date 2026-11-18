@@ -1,5 +1,13 @@
 package tn.softsys.buanderie.service.referentiel;
 
+import org.springframework.util.MultiValueMap;
+
+import org.springframework.web.client.HttpStatusCodeException;
+
+import tn.softsys.buanderie.security.CubixTokenStore;
+
+import org.springframework.web.client.HttpClientErrorException;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,16 +36,10 @@ public class ConnecteurRest {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final CubixTokenStore cubixTokens;
 
     public List<JsonNode> recupererListe(String url, ConfigurationIntegration config, String cheminListe) {
-        ResponseEntity<String> response = restTemplate.exchange(
-                url,
-                HttpMethod.GET,
-                new HttpEntity<>(entetes(config)),
-                String.class
-        );
-
-        String corps = response.getBody();
+        String corps = appeler(url, config);
         if (corps == null || corps.isBlank()) {
             return List.of();
         }
@@ -100,6 +102,19 @@ public class ConnecteurRest {
                 break;
             }
 
+            // Nouvelle API CUBIX (BuanderieApi) : {ok, total, page, pageSize, items}
+            JsonNode ok = naviguer(racine, "ok");
+            if (ok != null && ok.isBoolean()) {
+                JsonNode totalApi = naviguer(racine, "total");
+                if (totalApi != null && totalApi.canConvertToInt() && tous.size() >= totalApi.asInt()) {
+                    break;
+                }
+                if (elements.size() < taillePage) {
+                    break;
+                }
+                continue;
+            }
+
             JsonNode suivante = naviguer(racine, "HasNextPage");
             if (suivante != null && suivante.isBoolean()) {
                 if (!suivante.asBoolean()) {
@@ -124,15 +139,94 @@ public class ConnecteurRest {
         return tous;
     }
 
-    private JsonNode lireRacine(String url, ConfigurationIntegration config) {
-        ResponseEntity<String> response = restTemplate.exchange(
-                url,
-                HttpMethod.GET,
-                new HttpEntity<>(entetes(config)),
-                String.class
-        );
+    /**
+     * Appel GET. Avec la connexion CUBIX, un jeton refusé (401) est redemandé une fois, puis l'appel est rejoué.
+     */
+    private String appeler(String url, ConfigurationIntegration config) {
+        try {
+            return restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(entetes(config)), String.class).getBody();
+        } catch (HttpClientErrorException.Unauthorized e) {
+            if (config.getTypeAuthentification() != TypeAuthentification.CUBIX) {
+                throw e;
+            }
+            cubixTokens.retirer(cubixTokens.loginCourant());
+            throw new BusinessException("Session CUBIX expirée ou refusée : reconnectez-vous avec votre compte CUBIX.");
+        } catch (HttpStatusCodeException e) {
+            if (config.getTypeAuthentification() != TypeAuthentification.CUBIX) {
+                throw e;
+            }
+            throw erreurCubix(e);
+        }
+    }
 
-        String corps = response.getBody();
+    /** Lecture GET d'une réponse JSON complète (utile pour les listes paginées gardées telles quelles). */
+    public JsonNode lireJson(String url, ConfigurationIntegration config) {
+        return lireRacine(url, config);
+    }
+
+    /** Écriture POST JSON (ex. ImporterMachines) avec les mêmes en-têtes d'authentification que les lectures. */
+    public JsonNode ecrireJson(String url, ConfigurationIntegration config, Object corps) {
+        return envoyer(url, config, corps, MediaType.APPLICATION_JSON);
+    }
+
+    /** Écriture POST en formulaire (clé=valeur, une clé répétée pour une liste) : le plus fiable avec ASP.NET MVC. */
+    public JsonNode ecrireFormulaire(String url, ConfigurationIntegration config, MultiValueMap<String, String> champs) {
+        return envoyer(url, config, champs, MediaType.APPLICATION_FORM_URLENCODED);
+    }
+
+    private JsonNode envoyer(String url, ConfigurationIntegration config, Object corps, MediaType typeContenu) {
+        HttpHeaders headers = entetes(config);
+        headers.setContentType(typeContenu);
+        try {
+            String reponse = restTemplate.exchange(url, HttpMethod.POST, new HttpEntity<>(corps, headers), String.class).getBody();
+            return reponse == null || reponse.isBlank() ? objectMapper.createObjectNode() : objectMapper.readTree(reponse);
+        } catch (HttpClientErrorException.Unauthorized e) {
+            if (config.getTypeAuthentification() == TypeAuthentification.CUBIX) {
+                cubixTokens.retirer(cubixTokens.loginCourant());
+                throw new BusinessException("Session CUBIX expirée ou refusée : reconnectez-vous avec votre compte CUBIX.");
+            }
+            throw e;
+        } catch (HttpStatusCodeException e) {
+            throw erreurCubix(e);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException("La réponse de " + url + " n'est pas un JSON valide.");
+        }
+    }
+
+    /** Message lisible à partir d'une erreur CUBIX {"ok":false,"code":"...","message":"..."}. */
+    private BusinessException erreurCubix(HttpStatusCodeException e) {
+        String message = null;
+        String corps = e.getResponseBodyAsString();
+        try {
+            JsonNode racine = objectMapper.readTree(corps);
+            JsonNode m = racine.get("message");
+            JsonNode code = racine.get("code");
+            if (m != null && !m.isNull()) {
+                message = m.asText() + (code != null && !code.isNull() ? " [" + code.asText() + "]" : "");
+            }
+        } catch (Exception ignore) {
+            // corps non JSON (page d'erreur HTML d'ASP.NET) : on en extrait le titre ou le début
+        }
+        if ((message == null || message.isBlank()) && corps != null && !corps.isBlank()) {
+            java.util.regex.Matcher t = java.util.regex.Pattern
+                    .compile("<title>(.*?)</title>", java.util.regex.Pattern.DOTALL | java.util.regex.Pattern.CASE_INSENSITIVE)
+                    .matcher(corps);
+            String brut = t.find() ? t.group(1) : corps.replaceAll("<[^>]*>", " ");
+            brut = brut.replaceAll("\\s+", " ").trim();
+            if (!brut.isEmpty()) {
+                message = "HTTP " + e.getStatusCode().value() + " - " + (brut.length() > 300 ? brut.substring(0, 300) : brut);
+            }
+        }
+        if (message == null || message.isBlank()) {
+            message = "CUBIX a répondu HTTP " + e.getStatusCode().value() + ".";
+        }
+        return new BusinessException("CUBIX : " + message);
+    }
+
+    private JsonNode lireRacine(String url, ConfigurationIntegration config) {
+        String corps = appeler(url, config);
         if (corps == null || corps.isBlank()) {
             return objectMapper.createArrayNode();
         }
@@ -212,6 +306,14 @@ public class ConnecteurRest {
                 if (config.getUtilisateur() != null && config.getMotDePasse() != null) {
                     headers.setBasicAuth(config.getUtilisateur(), config.getMotDePasse());
                 }
+            }
+            case CUBIX -> {
+                String jeton = cubixTokens.jetonCourant();
+                if (jeton == null) {
+                    throw new BusinessException("Aucune session CUBIX : connectez-vous avec votre compte CUBIX "
+                            + "(la synchronisation utilise le jeton de l'utilisateur connecté).");
+                }
+                headers.set(CubixClient.ENTETE_JETON, jeton);
             }
             case AUCUNE -> {
             }

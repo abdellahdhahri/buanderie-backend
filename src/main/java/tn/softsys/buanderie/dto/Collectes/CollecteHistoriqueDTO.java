@@ -1,4 +1,4 @@
-package tn.softsys.buanderie.dto;
+package tn.softsys.buanderie.dto.Collectes;
 
 import lombok.Builder;
 import lombok.Data;
@@ -19,7 +19,7 @@ public class CollecteHistoriqueDTO {
     private Long   serviceId;
     private String serviceCode;
 
-    private Long   chambreIdSqlServer;
+    private Long   chambreId;
     private String codeChambre;
 
     private LocalDateTime dateCollecte;
@@ -33,7 +33,7 @@ public class CollecteHistoriqueDTO {
     private Integer nbTotal;
 
     private List<CollecteLingeDTO> linges;
-    private List<SacInfecteResumeDTO> sacsInfectes;
+    private List<BacInfecteResumeDTO> bacsInfectes;
 
     @Data @Builder
     public static class CollecteLingeDTO {
@@ -50,23 +50,17 @@ public class CollecteHistoriqueDTO {
     }
 
     @Data @Builder
-    public static class SacInfecteResumeDTO {
-        private Long    id;
-        private String  numeroSac;
-        private String  etat;
+    public static class BacInfecteResumeDTO {
+        private Long    bacId;
+        private String  codeBac;
         private Integer quantiteDeclaree;
-        private Integer quantiteCompteePostLavage;
-        private Integer ecart;
-        private LocalDateTime dateCollecte;
-        private LocalDateTime dateReception;
-        private List<SacItemDTO> items;
+        private LocalDateTime dateDeclaration;
+        private List<ItemDTO> items;
 
         @Data @Builder
-        public static class SacItemDTO {
+        public static class ItemDTO {
             private String  categorie;
             private Integer quantiteDeclaree;
-            private Integer quantiteComptee;
-            private Integer ecart;
         }
     }
 }

@@ -9,7 +9,8 @@ public enum Referentiel {
     ARSENAL(true),
     EMPLACEMENT(true),
     LINGE(true),
-    MACHINE(true);
+    MACHINE(true),
+    BAC(true);
 
     private final boolean synchronisationDisponible;
 

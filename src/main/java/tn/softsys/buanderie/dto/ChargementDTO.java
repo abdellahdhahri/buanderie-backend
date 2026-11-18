@@ -7,7 +7,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import tn.softsys.buanderie.entity.enums.CategLinge;
-import tn.softsys.buanderie.entity.enums.EtatLot;
+import tn.softsys.buanderie.entity.enums.EtatBac;
 import tn.softsys.buanderie.entity.enums.TypeCollecte;
 
 @Data
@@ -16,8 +16,8 @@ import tn.softsys.buanderie.entity.enums.TypeCollecte;
 @AllArgsConstructor
 public class ChargementDTO {
 
-    private String codeLot;
-    private EtatLot etatLot;
+    private String codeBac;
+    private EtatBac etatBac;
     private CategLinge categorie;
     private TypeCollecte typeCollecte;
     private int nbLinges;

@@ -1,5 +1,9 @@
 package tn.softsys.buanderie.controller;
 
+import tn.softsys.buanderie.service.referentiel.CubixMachineImportService;
+
+import com.fasterxml.jackson.databind.JsonNode;
+
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -18,6 +22,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class MachineController {
     private final MachineService machineService;
+    private final CubixMachineImportService cubixMachineImportService;
 
 
     @GetMapping
@@ -44,6 +49,20 @@ public class MachineController {
     @PutMapping("/{id}")
     public Machine modifier(@PathVariable Long id, @RequestBody Machine machine) {
         return machineService.modifier(id, machine);
+    }
+
+    /** Mode CUBIX : immobilisations importables (laveurs / séchoirs à classer dans CUBIX). */
+    @GetMapping("/machinesAimporter")
+    public JsonNode machinesAImporter(@RequestParam(required = false) String q,
+                                      @RequestParam(defaultValue = "1") int page,
+                                      @RequestParam(defaultValue = "50") int pageSize) {
+        return cubixMachineImportService.importables(q, page, pageSize);
+    }
+
+    /** Mode CUBIX : importe la sélection [{id, type: LAVEUR | SECHEUR}] puis relit les machines. */
+    @PostMapping("/import")
+    public Map<String, Object> importerMachines(@RequestBody List<MachineImportRequest> demandes) {
+        return cubixMachineImportService.importer(demandes);
     }
 
     @GetMapping("/code/{code}")

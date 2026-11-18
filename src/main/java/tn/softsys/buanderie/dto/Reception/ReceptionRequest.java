@@ -10,6 +10,5 @@ public class ReceptionRequest {
 
     private List<String> codesBac;
     private String matriculeAgent;
-    private List<String> numerosSacsInfectes;
     private List<String> rfidTags;
 }

@@ -160,7 +160,7 @@ public class ChambreService {
         if (cles.isEmpty()) {
             return;
         }
-        int nombre = lingeRepository.findByLitIdSqlServerInAndEtat(cles, EtatLinge.LIVRE).size();
+        int nombre = lingeRepository.findByLitIdInAndEtat(cles, EtatLinge.LIVRE).size();
         if (nombre > 0) {
             throw new BusinessException(
                     "Impossible : " + nombre + " linge(s) sont affectés aux lits de cette chambre.");

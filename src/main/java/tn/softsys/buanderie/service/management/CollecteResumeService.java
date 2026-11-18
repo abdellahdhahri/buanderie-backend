@@ -8,9 +8,9 @@ import tn.softsys.buanderie.dto.ResumeCategorieDTO;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.CategLinge;
 import tn.softsys.buanderie.exception.BusinessException;
+import tn.softsys.buanderie.repository.BacQuantiteRepository;
 import tn.softsys.buanderie.repository.CollecteLingeRepository;
 import tn.softsys.buanderie.repository.CollecteRepository;
-import tn.softsys.buanderie.repository.SacInfecteRepository;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -22,7 +22,7 @@ public class CollecteResumeService {
 
     private final CollecteRepository collecteRepository;
     private final CollecteLingeRepository collecteLingeRepository;
-    private final SacInfecteRepository sacInfecteRepository;
+    private final BacQuantiteRepository bacQuantiteRepository;
 
     public ResumeCollecteDTO getResume(Long collecteId) {
 
@@ -45,16 +45,11 @@ public class CollecteResumeService {
 
             compteur.merge(categorie,1,Integer::sum);
         }
-        sacInfecteRepository.findByCollecte_Id(collecteId)
-                .forEach(sac ->
-                        sac.getItems().forEach(item ->
-                                compteur.merge(
-                                        item.getCategorie(),
-                                        item.getQuantiteDeclaree(),
-                                        Integer::sum
-                                )
-                        )
-                );
+        bacQuantiteRepository.findByCollecteId(collecteId)
+                .forEach(q -> compteur.merge(
+                        q.getCategorie(),
+                        q.getQuantiteDeclaree(),
+                        Integer::sum));
         List<ResumeCategorieDTO> categories =
                 compteur.entrySet()
                         .stream()
@@ -72,7 +67,7 @@ public class CollecteResumeService {
 
         return ResumeCollecteDTO.builder()
                 .collecteId(collecte.getId())
-              //  .agent(collecte.getAgent().getNom())
+                //  .agent(collecte.getAgent().getNom())
                 .serviceId(collecte.getService())
                 .categories(categories)
                 .totalPieces(total)

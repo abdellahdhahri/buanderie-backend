@@ -1,5 +1,7 @@
 package tn.softsys.buanderie.service.referentiel;
 
+import tn.softsys.buanderie.entity.enums.TypeAuthentification;
+
 import java.time.LocalDateTime;
 
 import org.springframework.scheduling.annotation.Scheduled;
@@ -27,6 +29,9 @@ public class SynchronisationScheduler {
                 return;
             }
 
+            if (config.getTypeAuthentification() == TypeAuthentification.CUBIX) {
+                return;
+            }
             int frequence = config.getFrequenceMinutes() == null ? 60 : config.getFrequenceMinutes();
 
             for (EndpointIntegration endpoint : integrationService.getEndpoints()) {

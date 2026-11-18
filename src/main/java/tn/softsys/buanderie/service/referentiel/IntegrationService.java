@@ -1,5 +1,9 @@
 package tn.softsys.buanderie.service.referentiel;
 
+import tn.softsys.buanderie.security.CubixTokenStore;
+
+import java.util.Map;
+
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -32,6 +36,8 @@ public class IntegrationService {
     private final ConfigurationIntegrationRepository configurationRepository;
     private final EndpointIntegrationRepository endpointRepository;
     private final ServiceRepository serviceRepository;
+    private final CubixClient cubixClient;
+    private final CubixTokenStore cubixTokens;
 
     @Value("${buanderie.integration.mode:INTERNE}")
     private String modeParDefaut;
@@ -282,6 +288,27 @@ public class IntegrationService {
                 && vide(config.getJeton()) == null) {
             throw new BusinessException("Le jeton ou la clé API est obligatoire pour ce type d'authentification.");
         }
+    }
+
+    public Map<String, Object> testerConnexionCubix() {
+        String jeton = cubixTokens.jetonCourant();
+        Map<String, Object> resultat = new LinkedHashMap<>();
+        if (jeton == null) {
+            resultat.put("succes", false);
+            resultat.put("message", "Aucune session CUBIX : connectez-vous avec votre compte CUBIX (POST /api/auth/login).");
+            return resultat;
+        }
+        try {
+            CubixClient.Identite u = cubixClient.ping(jeton);
+            resultat.put("succes", true);
+            resultat.put("utilisateur", Map.of("id", u.id() == null ? 0 : u.id(),
+                    "nom", u.nom() == null ? "" : u.nom(), "administrateur", u.administrateur()));
+            resultat.put("message", "Session CUBIX valide.");
+        } catch (BusinessException e) {
+            resultat.put("succes", false);
+            resultat.put("message", e.getMessage());
+        }
+        return resultat;
     }
 
     private <E extends Enum<E>> E parse(Class<E> type, String valeur, E defaut) {

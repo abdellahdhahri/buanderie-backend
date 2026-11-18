@@ -30,7 +30,7 @@ public class AffectationLitService {
     private final HistoriqueLingeRepository  historiqueRepo;
     private final ChambreLitReferentielService chambreLitService;
     private final ProfilExploitationService profilExploitationService;
-    private final PersonnelRepository sqlPersonnelRepo;
+    private final PersonnelRepository personnelRepository;
 
     public Map<String, Object> scanChambre(String codeBarre, String matriculeAgent) {
         agentRepo.findByMatricule(matriculeAgent)
@@ -46,7 +46,7 @@ public class AffectationLitService {
 
         List<Map<String,Object>> litsDto = lits.stream().map(lit -> {
             // Linges déjà posés sur ce lit
-            List<Linge> poses = lingeRepo.findByLitIdSqlServerInAndEtat(List.of(lit.getId()), EtatLinge.LIVRE);
+            List<Linge> poses = lingeRepo.findByLitIdInAndEtat(List.of(lit.getId()), EtatLinge.LIVRE);
             return Map.<String,Object>of(
                     "litId",      lit.getId(),
                     "codeLit",    lit.getCode() != null ? lit.getCode() : "",
@@ -61,9 +61,9 @@ public class AffectationLitService {
         }).collect(Collectors.toList());
 
         // Linges LIVRE disponibles (sans lit assigné) — prêts à poser
-        List<Linge> disponibles = lingeRepo.findByEtatAndLitIdSqlServerIsNull(EtatLinge.LIVRE)
+        List<Linge> disponibles = lingeRepo.findByEtatAndLitIdIsNull(EtatLinge.LIVRE)
                 .stream()
-                .filter(l -> chambre.getId().equals(l.getChambreIdSqlServer()) || l.getChambreIdSqlServer() == null)
+                .filter(l -> chambre.getId().equals(l.getChambreId()) || l.getChambreId() == null)
                 .collect(Collectors.toList());
 
         return Map.of(
@@ -85,7 +85,7 @@ public class AffectationLitService {
                                              String codeOuTag, String matriculeAgent) {
         profilExploitationService.exigerNiveau(NiveauRattachement.LIT);
 
-        Personnel agent = sqlPersonnelRepo.findByCodeBarre(matriculeAgent);
+        Personnel agent = personnelRepository.findByCodeBarre(matriculeAgent);
 //                .orElseThrow(() -> new ResourceNotFoundException("Agent","matricule",matriculeAgent));
 
         Linge linge = lingeRepo.findByCodeBarre(codeOuTag)
@@ -95,11 +95,11 @@ public class AffectationLitService {
         if (linge.getEtat() != EtatLinge.LIVRE)
             throw new BusinessException("Linge non disponible — état : " + linge.getEtat());
 
-        if (linge.getLitIdSqlServer() != null)
-            throw new BusinessException("Linge déjà affecté au lit " + linge.getLitIdSqlServer());
+        if (linge.getLitId() != null)
+            throw new BusinessException("Linge déjà affecté au lit " + linge.getLitId());
 
-        linge.setLitIdSqlServer(litId);
-        linge.setChambreIdSqlServer(chambreId);
+        linge.setLitId(litId);
+        linge.setChambreId(chambreId);
         linge.setStatutCollecte(null); // prêt pour prochaine collecte
         lingeRepo.save(linge);
 
@@ -126,7 +126,7 @@ public class AffectationLitService {
     public Map<String, Object> getEtatChambre(Long chambreId) {
         List<LitDto> lits = chambreLitService.getLitsByChambre(chambreId);
         List<Map<String,Object>> litsDto = lits.stream().map(lit -> {
-            List<Linge> lg = lingeRepo.findByLitIdSqlServerInAndEtat(List.of(lit.getId()), EtatLinge.LIVRE);
+            List<Linge> lg = lingeRepo.findByLitIdInAndEtat(List.of(lit.getId()), EtatLinge.LIVRE);
             return Map.<String,Object>of("litId",lit.getId(),
                     "codeLit",lit.getCode()!=null?lit.getCode():"",
                     "nbLinges",lg.size(),

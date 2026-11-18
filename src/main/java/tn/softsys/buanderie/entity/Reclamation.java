@@ -23,6 +23,19 @@ public class Reclamation {
     @ManyToOne
     private Agent agent;
 
+    /** Personnel qui a déclaré la réclamation (l'ancien champ « agent » n'est plus alimenté). */
+    private Long personnelId;
+
+    @jakarta.persistence.Column(length = 150)
+    private String personnelNom;
+
+    /** Renseignée pour une réclamation sur une machine (le linge est alors vide). */
+    @ManyToOne
+    private Machine machine;
+
+    @jakarta.persistence.Column(length = 500)
+    private String description;
+
     @Enumerated(EnumType.STRING)
     private TypeReclamation type;
 

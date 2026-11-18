@@ -1,4 +1,4 @@
-package tn.softsys.buanderie.service.Process;
+package tn.softsys.buanderie.service.management;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -26,27 +26,17 @@ import tn.softsys.buanderie.entity.CollecteLinge;
 import tn.softsys.buanderie.entity.HistoriqueLinge;
 import tn.softsys.buanderie.entity.Linge;
 import tn.softsys.buanderie.entity.Personnel;
-import tn.softsys.buanderie.entity.SacInfecte;
 import tn.softsys.buanderie.entity.enums.CategLinge;
 import tn.softsys.buanderie.entity.enums.EtatBac;
 import tn.softsys.buanderie.entity.enums.EtatCollecte;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
-import tn.softsys.buanderie.entity.enums.EtatSac;
 import tn.softsys.buanderie.entity.enums.StatutCollecteLinge;
 import tn.softsys.buanderie.entity.enums.TypeBac;
 import tn.softsys.buanderie.entity.enums.TypeCollecte;
 import tn.softsys.buanderie.entity.enums.TypeOperation;
 import tn.softsys.buanderie.exception.BusinessException;
 import tn.softsys.buanderie.exception.ResourceNotFoundException;
-import tn.softsys.buanderie.repository.BacRepository;
-import tn.softsys.buanderie.repository.CollecteLingeRepository;
-import tn.softsys.buanderie.repository.CollecteRepository;
-import tn.softsys.buanderie.repository.HistoriqueLingeRepository;
-import tn.softsys.buanderie.repository.LingeRepository;
-import tn.softsys.buanderie.repository.PersonnelRepository;
-import tn.softsys.buanderie.repository.RemiseLingeCollecteRepository;
-import tn.softsys.buanderie.repository.SacInfecteRepository;
-import tn.softsys.buanderie.service.management.SacInfecteService;
+import tn.softsys.buanderie.repository.*;
 
 
 @Service
@@ -73,8 +63,7 @@ public class CollecteAjoutManuelService {
     private final CollecteLingeRepository collecteLingeRepo;
     private final LingeRepository lingeRepo;
     private final BacRepository bacRepo;
-    private final SacInfecteRepository sacInfecteRepo;
-    private final SacInfecteService sacInfecteService;
+    private final BacQuantiteRepository bacQuantiteRepo;
     private final HistoriqueLingeRepository historiqueRepo;
     private final RemiseLingeCollecteRepository remiseCollecteRepo;
     private final PersonnelRepository personnelRepo;
@@ -102,7 +91,7 @@ public class CollecteAjoutManuelService {
 
         if (request.getCodeContenant() == null || request.getCodeContenant().isBlank()) {
             throw new BusinessException(
-                    "Le code du contenant (bac ou sac infecté) est obligatoire.");
+                    "Le code du bac est obligatoire.");
         }
 
         // ---- Collecte ----
@@ -135,29 +124,13 @@ public class CollecteAjoutManuelService {
 
         // ---- Contenant ----
         String codeContenant = request.getCodeContenant().trim();
-        SacInfecte sac = sacInfecteRepo.findByNumeroSac(codeContenant).orElse(null);
-        Bac bac = null;
+        Bac bac;
 
-        if (sac != null) {
-            if (nature == Nature.UNIFORME) {
-                throw new BusinessException(
-                        "Une collecte d'uniformes utilise des bacs : scannez un bac.");
-            }
-            if (sac.getCollecte() == null
-                    || !Objects.equals(sac.getCollecte().getId(), collecteId)) {
-                throw new BusinessException(
-                        "Le sac " + sac.getNumeroSac() + " n'appartient pas à cette collecte.");
-            }
-            if (sac.getEtat() != EtatSac.DECLARE) {
-                throw new BusinessException(
-                        "Le sac " + sac.getNumeroSac() + " n'est plus modifiable (état : "
-                                + sac.getEtat() + ").");
-            }
-        } else {
+        {
             bac = bacRepo.findByCode(codeContenant)
                     .or(() -> bacRepo.findByRfidTag(codeContenant))
                     .orElseThrow(() -> new BusinessException(
-                            "Bac ou sac infecté introuvable : " + codeContenant));
+                            "Bac introuvable : " + codeContenant));
 
             if (bac.getEtat() != null && !ETATS_BAC_AUTORISES.contains(bac.getEtat())) {
                 throw new BusinessException(
@@ -166,7 +139,7 @@ public class CollecteAjoutManuelService {
             }
         }
 
-        boolean infecte = sac != null || bac.getTypebac() == TypeBac.INFECTE;
+        boolean infecte = bac.getTypebac() == TypeBac.INFECTE;
 
         // ---- Validation de tous les linges avant toute écriture ----
         List<Linge> aAjouter = new ArrayList<>();
@@ -188,8 +161,8 @@ public class CollecteAjoutManuelService {
                 continue;
             }
 
-            if (linge.getBac() != null || linge.getSacInfecte() != null) {
-                erreurs.add(code + " : déjà dans un bac ou un sac");
+            if (linge.getBac() != null) {
+                erreurs.add(code + " : déjà dans un bac");
                 continue;
             }
 
@@ -247,12 +220,12 @@ public class CollecteAjoutManuelService {
                 ? StatutCollecteLinge.INFECTE_PRESUME
                 : StatutCollecteLinge.BLANC;
         TypeCollecte typeCollecte = infecte ? TypeCollecte.INFECTE : TypeCollecte.BLANC;
-        String codeContenantFinal = sac != null ? sac.getNumeroSac() : bac.getCode();
+        String codeContenantFinal = bac.getCode();
 
         // Collecte de service + sac infecté : la quantité est déjà portée par le
         // sac (cloturer() additionne les lignes INFECTE ET les quantités des sacs).
         // On ne crée donc pas de CollecteLinge pour éviter de compter deux fois.
-        boolean creerLigneCollecte = !(nature == Nature.SERVICE && sac != null);
+        boolean creerLigneCollecte = true;
 
         int horsAttendus = 0;
         Map<CategLinge, Integer> ajoutsSnapshot = new EnumMap<>(CategLinge.class);
@@ -270,18 +243,13 @@ public class CollecteAjoutManuelService {
 
             EtatLinge etatAvant = linge.getEtat();
 
-            if (sac != null) {
-                linge.setSacInfecte(sac);
-                sacInfecteService.ajouterLingeAuSac(sac, linge);
-            } else {
-                linge.setBac(bac);
-            }
+            linge.setBac(bac);
 
             linge.setEtat(nouvelEtat);
             linge.setStatutCollecte(statut);
             linge.setTypeCollecte(typeCollecte);
-            linge.setLitIdSqlServer(null);
-            linge.setChambreIdSqlServer(null);
+            linge.setLitId(null);
+            linge.setChambreId(null);
             linge.setArsenalEmplacementID(null);
             linge.setEmplacement(null);
             lingeRepo.save(linge);
@@ -338,9 +306,7 @@ public class CollecteAjoutManuelService {
         reponse.put("collecteId", collecteId);
         reponse.put("typeDeCollecte", nature.name());
         reponse.put("codeContenant", codeContenantFinal);
-        reponse.put("typeContenant", sac != null
-                ? "SAC_INFECTE"
-                : infecte ? "BAC_INFECTE" : "BAC_BLANC");
+        reponse.put("typeContenant", infecte ? "BAC_INFECTE" : "BAC_BLANC");
         reponse.put("estInfecte", infecte);
         reponse.put("nbAjoutes", aAjouter.size());
         reponse.put("nbHorsAttendus", horsAttendus);
@@ -351,7 +317,7 @@ public class CollecteAjoutManuelService {
 
 
     private Nature natureDe(Collecte collecte) {
-        if (collecte.getChambreIdSqlServer() != null) {
+        if (collecte.getChambreId() != null) {
             return Nature.CHAMBRE;
         }
         if (collecte.getNumeroCollecte() != null
@@ -371,9 +337,9 @@ public class CollecteAjoutManuelService {
         }
         switch (nature) {
             case CHAMBRE:
-                return collecte.getChambreIdSqlServer() != null
-                        && Objects.equals(linge.getChambreIdSqlServer(),
-                        collecte.getChambreIdSqlServer());
+                return collecte.getChambreId() != null
+                        && Objects.equals(linge.getChambreId(),
+                        collecte.getChambreId());
             case SERVICE:
                 return collecte.getService() != null
                         && Objects.equals(linge.getServiceId(), collecte.getService());
@@ -410,14 +376,10 @@ public class CollecteAjoutManuelService {
             long attendus = collecte.getNbAttendus() != null ? collecte.getNbAttendus() : 0;
             propres = Math.max(0, attendus - blancs - infectes - manquants);
         } else if (nature == Nature.SERVICE) {
-            infectes += sacInfecteRepo.findByCollecte_Id(collecte.getId()).stream()
-                    .mapToLong(s -> s.getItems() == null
+            infectes += bacQuantiteRepo.findByCollecteId(collecte.getId()).stream()
+                    .mapToLong(q -> q.getQuantiteDeclaree() == null
                             ? 0L
-                            : s.getItems().stream()
-                              .mapToLong(i -> i.getQuantiteDeclaree() == null
-                                              ? 0L
-                                              : i.getQuantiteDeclaree())
-                              .sum())
+                            : q.getQuantiteDeclaree())
                     .sum();
         }
 

@@ -10,6 +10,7 @@ public class LoginResponseDTO {
     private List<String> privileges;
     private String codeBarre;
     private UserDTO user;
+    private List<java.util.Map<String, Object>> etapes;
 
     public LoginResponseDTO(
             String token,
@@ -65,6 +66,14 @@ public class LoginResponseDTO {
 
     public void setCodeBarre(String codeBarre) {
         this.codeBarre = codeBarre;
+    }
+
+    public List<java.util.Map<String, Object>> getEtapes() {
+        return etapes;
+    }
+
+    public void setEtapes(List<java.util.Map<String, Object>> etapes) {
+        this.etapes = etapes;
     }
 
     public UserDTO getUser() {

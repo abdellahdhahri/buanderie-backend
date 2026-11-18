@@ -1,5 +1,13 @@
 package tn.softsys.buanderie.service.management;
 
+import tn.softsys.buanderie.entity.enums.TypeCollecte;
+
+import tn.softsys.buanderie.entity.enums.TypeBac;
+
+import tn.softsys.buanderie.entity.enums.CategLinge;
+
+import tn.softsys.buanderie.entity.enums.UsageBac;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,6 +65,58 @@ public class BacService {
         return bacRepository.findByEtat(etat);
     }
 
+    public List<BacDTO> listerBacsDeTri(EtatBac etat, CategLinge categorie, TypeCollecte typeCollecte) {
+        return bacRepository.findByUsage(UsageBac.TRI).stream()
+                .filter(b -> etat == null || b.getEtat() == etat)
+                .filter(b -> categorie == null || b.getCategorie() == categorie)
+                .filter(b -> typeCollecte == null || b.getTypeCollecte() == typeCollecte)
+                .map(BacDTO::from)
+                .toList();
+    }
+
+    /**
+     * Modifie les champs internes d'un bac : seuls les champs fournis changent. Pour un bac importé de CUBIX,
+     * le code et la désignation appartiennent à CUBIX (ils ne sont pas modifiés ici) ; l'état du bac reste géré
+     * par les opérations (tri, lavage...).
+     */
+    @Transactional
+    public Bac modifier(Long id, BacDTO dto) {
+        Bac bac = bacRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Bac", id));
+        boolean externe = bac.getSourceDonnee() == tn.softsys.buanderie.entity.enums.SourceDonnee.EXTERNE;
+
+        if (!externe) {
+            if (dto.getCode() != null && !dto.getCode().isBlank() && !dto.getCode().equals(bac.getCode())) {
+                if (bacRepository.findByCode(dto.getCode()).isPresent()) {
+                    throw new BusinessException("Le code « " + dto.getCode() + " » est déjà utilisé par un autre bac.");
+                }
+                bac.setCode(dto.getCode().trim());
+            }
+            if (dto.getDesignation() != null) {
+                bac.setDesignation(dto.getDesignation().isBlank() ? null : dto.getDesignation().trim());
+            }
+        }
+        if (dto.getTypebac() != null) {
+            bac.setTypebac(dto.getTypebac());
+        }
+        if (dto.getUsage() != null) {
+            bac.setUsage(dto.getUsage());
+        }
+        if (dto.getCategorie() != null) {
+            bac.setCategorie(dto.getCategorie());
+        }
+        if (dto.getTypeCollecte() != null) {
+            bac.setTypeCollecte(dto.getTypeCollecte());
+        }
+        if (dto.getCapacite_max() != null) {
+            bac.setCapacite_max(dto.getCapacite_max());
+        }
+        if (dto.getObservations() != null) {
+            bac.setObservations(dto.getObservations());
+        }
+        return bacRepository.save(bac);
+    }
+
     public Bac creer(BacDTO bacDTO) {
         if (bacRepository.existsByReference(bacDTO.getReference())) {
             throw new BusinessException("Un bac avec la référence '" + bacDTO.getReference() + "' existe déjà");
@@ -66,17 +126,27 @@ public class BacService {
 //        if (bacDTO.getService() != null) {
 //            service = serviceRepository.findById(bacDTO.getService().getId()).orElse(null);
 //        }
+        UsageBac usage = bacDTO.getUsage() != null ? bacDTO.getUsage() : UsageBac.COLLECTE;
+        boolean bacDeTri = usage == UsageBac.TRI;
+
         Bac bac = Bac.builder()
                 .reference(bacDTO.getReference())
-                .etat(EtatBac.EN_ATTENTE_COLLECTE)
+                .etat(bacDeTri ? EtatBac.VIDE : EtatBac.EN_ATTENTE_COLLECTE)
+                .usage(usage)
+                .categorie(bacDTO.getCategorie())
+                .poidsBalance(bacDTO.getPoidsBalance())
                 .observations(bacDTO.getObservations())
                 .poids(bacDTO.getPoids())
-                .typeCollecte(bacDTO.getTypeCollecte())
+                .typeCollecte(bacDTO.getTypeCollecte() != null
+                        ? bacDTO.getTypeCollecte()
+                        : (bacDeTri ? TypeCollecte.BLANC : null))
                 .code(bacDTO.getCode())
                 .capacite_max((bacDTO.getCapacite_max()))
                 //.service(service)
 
-                .typebac(bacDTO.getTypebac())
+                .typebac(bacDTO.getTypebac() != null
+                        ? bacDTO.getTypebac()
+                        : (bacDeTri ? TypeBac.BLANC : null))
                 .build();
         return bacRepository.save(bac);
     }
@@ -123,7 +193,7 @@ public class BacService {
 
 
     private void changerEtatBac(Bac bac, EtatBac nouvelEtat, Agent agent,
-                                 TypeOperation operation, String observations) {
+                                TypeOperation operation, String observations) {
         EtatBac ancienEtat = bac.getEtat();
         bac.setEtat(nouvelEtat);
         bacRepository.save(bac);
@@ -156,6 +226,10 @@ public class BacService {
         }
 
         bac.setPoids(0.0);
+        bac.setPoidsBalance(null);
+        if (bac.getUsage() == UsageBac.TRI) {
+            bac.setEtat(EtatBac.VIDE);
+        }
 
         return bacRepository.save(bac);
     }

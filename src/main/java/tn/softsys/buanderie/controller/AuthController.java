@@ -26,7 +26,14 @@ public class AuthController {
     }
 
 
-     // Login avec badge / code-barres
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(java.security.Principal principal) {
+        if (principal != null) {
+            authService.logout(principal.getName());
+        }
+        return ResponseEntity.noContent().build();
+    }
+
 
     @PostMapping("/login/badge")
     public ResponseEntity<LoginResponseDTO> loginByBadge(

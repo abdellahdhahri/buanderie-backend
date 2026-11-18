@@ -13,5 +13,6 @@ public enum EtatBac {
     VIDE,
     EN_TRI,
     EN_RECEPTION,
-    EN_ATTENTE_SECHAGE
+    EN_ATTENTE_SECHAGE,
+    PRET_LAVAGE
 }

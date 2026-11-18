@@ -8,10 +8,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import tn.softsys.buanderie.entity.enums.EtatBac;
 import tn.softsys.buanderie.entity.enums.TypeOperation;
 
-/**
- * Journal complet de chaque bac.
- * Chaque changement d'état est signé par l'agent qui l'a effectué.
- */
+
 @Entity
 @Table(name = "historiques_bac")
 @Data
@@ -39,7 +36,6 @@ public class HistoriqueBac {
     @Column(name = "etat_apres", nullable = false, length = 30)
     private EtatBac etatApres;
 
-    /** Agent qui a effectué l'opération */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "agent_id", nullable = false)
     private Agent agent;

@@ -9,7 +9,8 @@ import java.util.List;
 
 
 @Repository
-public interface RemiseLingeRepository extends JpaRepository<RemiseLinge,Long> {
+public interface RemiseLingeRepository extends JpaRepository<RemiseLinge,Long>,
+        org.springframework.data.jpa.repository.JpaSpecificationExecutor<RemiseLinge> {
     List<RemiseLinge> findByCollecte_IdOrderByDateLivraisonDesc(
             Long collecteId
     );

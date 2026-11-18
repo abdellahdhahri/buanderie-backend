@@ -3,8 +3,9 @@ package tn.softsys.buanderie.controller;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import tn.softsys.buanderie.dto.CollecteHistoriqueDTO;
-import tn.softsys.buanderie.dto.CollecteListeDTO;
+
+import tn.softsys.buanderie.dto.Collectes.CollecteHistoriqueDTO;
+import tn.softsys.buanderie.dto.Collectes.CollecteListeDTO;
 import tn.softsys.buanderie.service.Reporting.CollecteHistoriqueService;
 
 import java.util.List;
@@ -34,10 +35,10 @@ public class CollecteHistoriqueController {
         return ResponseEntity.ok(service.getDetailCollecte(id).getLinges());
     }
 
-    @GetMapping("/{id}/sacs")
-    public ResponseEntity<List<CollecteHistoriqueDTO.SacInfecteResumeDTO>> getSacs(
+    @GetMapping("/{id}/bacs-infectes")
+    public ResponseEntity<List<CollecteHistoriqueDTO.BacInfecteResumeDTO>> getBacsInfectes(
             @PathVariable Long id) {
-        return ResponseEntity.ok(service.getDetailCollecte(id).getSacsInfectes());
+        return ResponseEntity.ok(service.getDetailCollecte(id).getBacsInfectes());
     }
 
     @GetMapping("/agent/{matricule}")

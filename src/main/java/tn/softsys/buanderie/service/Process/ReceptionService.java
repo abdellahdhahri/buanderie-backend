@@ -7,13 +7,12 @@ import tn.softsys.buanderie.repository.PersonnelRepository;
 import tn.softsys.buanderie.entity.Personnel;
 import tn.softsys.buanderie.dto.Reception.ReceptionRFIDRequest;
 import tn.softsys.buanderie.dto.Reception.ReceptionRequest;
-import tn.softsys.buanderie.dto.SacsInfectes.SacInfecteDTO;
 import tn.softsys.buanderie.entity.*;
 import tn.softsys.buanderie.entity.enums.*;
 import tn.softsys.buanderie.exception.BusinessException;
+import tn.softsys.buanderie.exception.ResourceNotFoundException;
 import tn.softsys.buanderie.repository.*;
 import tn.softsys.buanderie.service.management.ProfilExploitationService;
-import tn.softsys.buanderie.service.management.SacInfecteService;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -32,9 +31,8 @@ public class ReceptionService {
     private final LingeRepository lingeRepository;
     private final HistoriqueLingeRepository historiqueLingeRepository;
     private final ServiceRepository serviceRepository;
-    private final SacInfecteService sacInfecteService;
     private final ProfilExploitationService profilExploitationService;
-    private final PersonnelRepository sqlPersonnelRepo;
+    private final PersonnelRepository personnelRepository;
 
 
 
@@ -44,19 +42,25 @@ public class ReceptionService {
     public ReceptionResultDTO recevoirPlusieurs(ReceptionRequest request, String code ) {
 
 
-        Personnel agent = sqlPersonnelRepo.findByCodeBarre(code);
+        Personnel agent = personnelRepository.findByCodeBarre(code);
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", code);
+        }
         List<ReceptionBac> bacsRecus = new ArrayList<>();
-        List<SacInfecteDTO> sacsRecus = new ArrayList<>();
         //  Réception des bacs blancs
         if (request.getCodesBac() != null && !request.getCodesBac().isEmpty()) {
             for (String codeBac : request.getCodesBac()) {
                 Bac bac = bacRepository.findByCode(codeBac)
                         .orElseThrow(() -> new RuntimeException("Bac introuvable : " + codeBac));
-                if (bac.getTypebac() == TypeBac.INFECTE) {
+                boolean infecte = bac.getTypebac() == TypeBac.INFECTE;
+                if (infecte) {
                     profilExploitationService.exigerCircuitInfecte();
                 }
                 bac.setEtat(EtatBac.EN_RECEPTION);
-                bac.setPoids(null);
+                if (!infecte) {
+                    // le poids d'un bac infecté est conservé : il sert au lavage direct
+                    bac.setPoids(null);
+                }
                 bacRepository.save(bac);
                 ReceptionBac reception = ReceptionBac.builder()
                         .codeBac(bac.getCode())
@@ -68,6 +72,30 @@ public class ReceptionService {
                 reception = receptionRepo.save(reception);
 
                 List<Linge> linges = lingeRepository.findByBac_Code(codeBac);
+
+                if (infecte) {
+                    // Bac infecté : on ne l'ouvre pas et on ne détache pas ses linges.
+                    // Il part directement au lavage (désinfection) avec son contenu.
+                    if (linges.isEmpty()) {
+                        throw new BusinessException(
+                                "Le bac infecté " + bac.getCode() + " ne contient aucun linge déclaré.");
+                    }
+                    for (Linge linge : linges) {
+                        historiqueLingeRepository.save(
+                                HistoriqueLinge.builder()
+                                        .linge(linge)
+                                        .etatApres(linge.getEtat())
+                                        .etatAvant(linge.getEtat())
+                                        .personnelId(agent.getId())
+                                        .typeOperation(TypeOperation.RECEPTION_BAC)
+                                        .dateOperation(LocalDateTime.now())
+                                        .observations("Réception bac infecté " + bac.getCode()
+                                                + " — en attente de désinfection")
+                                        .build());
+                    }
+                    bacsRecus.add(reception);
+                    continue;
+                }
 
                 for (Linge linge : linges) {
                     EtatLinge etatAvant = linge.getEtat();
@@ -93,27 +121,28 @@ public class ReceptionService {
                 bacsRecus.add(reception);
             }
         }
-        //Réception des sacs infectés (sans ouverture)
-        if (request.getNumerosSacsInfectes() != null && !request.getNumerosSacsInfectes().isEmpty()) {
-            profilExploitationService.exigerCircuitInfecte();
-
-            for (String numeroSac : request.getNumerosSacsInfectes()) {
-                SacInfecteDTO sacDTO = sacInfecteService.recevoirSacInfecte(numeroSac, agent.getCodeBarre());
-                sacsRecus.add(sacDTO);
-            }
-        }
-
-        return new ReceptionResultDTO(bacsRecus, sacsRecus);
+        return new ReceptionResultDTO(bacsRecus);
     }
     //methode de reception en mode RFID
     @Transactional
     public ReceptionRFIDResultDTO recevoirRFID(ReceptionRFIDRequest request, String code) {
-        Personnel agent = sqlPersonnelRepo.findByCodeBarre(code);
+        Personnel agent = personnelRepository.findByCodeBarre(code);
+        if (agent == null) {
+            throw new ResourceNotFoundException("Agent", "matricule", code);
+        }
 
         Bac bac = bacRepository.findByCode(request.getCodeBac())
                 .orElseThrow(() -> new RuntimeException("Bac introuvable"));
 
         TypeBac typeBac = bac.getTypebac();
+
+        if (typeBac == TypeBac.INFECTE) {
+            // Bac infecté : réceptionné sans ouverture, linges conservés dans le bac
+            profilExploitationService.exigerCircuitInfecte();
+            bac.setEtat(EtatBac.EN_RECEPTION);
+            bacRepository.save(bac);
+            return new ReceptionRFIDResultDTO(new ArrayList<>(), bac.getCode(), typeBac.name());
+        }
 
         List<Linge> lingesTraites = new ArrayList<>();
         List<Linge> lingesDeBac = lingeRepository.findByBac_Code(request.getCodeBac());
@@ -235,12 +264,6 @@ public class ReceptionService {
                             + " : réceptionnez le bac.");
         }
 
-        if (linge.getSacInfecte() != null && linge.getEtat() == EtatLinge.INFECTE_COLLECTE) {
-            throw new BusinessException(
-                    "Le linge " + linge.getCodeBarre() + " est dans le sac infecté "
-                            + linge.getSacInfecte().getNumeroSac() + " : réceptionnez le sac.");
-        }
-
         if (linge.getEtat() != null && ETATS_DEJA_EN_BUANDERIE.contains(linge.getEtat())) {
             throw new BusinessException(
                     "Le linge " + linge.getCodeBarre() + " est déjà à la buanderie (état : " + linge.getEtat() + ").");
@@ -258,8 +281,8 @@ public class ReceptionService {
         EtatLinge etatAvant = linge.getEtat();
         linge.setEtat(EtatLinge.RECEPTION);
         linge.setTypeCollecte(estInfecte ? TypeCollecte.INFECTE : TypeCollecte.BLANC);
-        linge.setLitIdSqlServer(null);
-        linge.setChambreIdSqlServer(null);
+        linge.setLitId(null);
+        linge.setChambreId(null);
         linge.setArsenalEmplacementID(null);
         linge.setObservations("Réception sans bac");
         lingeRepository.save(linge);
@@ -304,7 +327,7 @@ public class ReceptionService {
         if (matricule == null || matricule.isBlank()) {
             throw new BusinessException("Le matricule de l'agent est obligatoire.");
         }
-        Personnel agent = sqlPersonnelRepo.findByCodeBarre(matricule.trim());
+        Personnel agent = personnelRepository.findByCodeBarre(matricule.trim());
         if (agent == null) {
             throw new BusinessException("Agent introuvable : " + matricule);
         }
@@ -342,11 +365,9 @@ public class ReceptionService {
     }
     public static class ReceptionResultDTO {
         public final List<ReceptionBac> bacsRecus;
-        public final List<SacInfecteDTO> sacsInfectesRecus;
 
-        public ReceptionResultDTO(List<ReceptionBac> bacsRecus, List<SacInfecteDTO> sacsInfectesRecus) {
+        public ReceptionResultDTO(List<ReceptionBac> bacsRecus) {
             this.bacsRecus = bacsRecus;
-            this.sacsInfectesRecus = sacsInfectesRecus;
         }
     }
 

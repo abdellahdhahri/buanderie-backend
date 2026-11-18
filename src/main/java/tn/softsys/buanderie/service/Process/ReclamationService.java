@@ -1,4 +1,8 @@
 package tn.softsys.buanderie.service.Process;
+
+import tn.softsys.buanderie.repository.MachineRepository;
+
+import tn.softsys.buanderie.entity.Machine;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,17 +23,22 @@ import java.util.List;
 @Service @RequiredArgsConstructor @Transactional
 public class ReclamationService {
     private final LingeRepository lingeRepository;
+    private final MachineRepository machineRepository;
     private final AgentRepository agentRepository;
     private final ReclamationRepository reclamationRepository;
     private final HistoriqueLingeRepository historiqueRepository;
     private final NotificationService notificationService;
-    private final PersonnelRepository sqlPersonnelRepo;
+    private final PersonnelRepository personnelRepository;
     private final PersonnelReferentielService personnelReferentielService;
 
 
 
     @Transactional
     public Reclamation creer(ReclamationRequest request) {
+
+        if (request.getCodeMachine() != null && !request.getCodeMachine().isBlank()) {
+            return creerPourMachine(request);
+        }
 
         PersonnelDto agent = personnelReferentielService
                 .getByCode(request.getMatriculeAgent());
@@ -62,7 +71,8 @@ public class ReclamationService {
 
         Reclamation reclamation = Reclamation.builder()
                 .linge(linge)
-                //   .agent(agent)
+                .personnelId(agent.getId())
+                .personnelNom(agent.getNomPrenom())
                 .type(request.getType())
                 .dateCreation(LocalDateTime.now())
                 .status(Reclamation.StatutReclamation.EN_COURS)
@@ -122,6 +132,41 @@ public class ReclamationService {
 
         return reclamation;
     }
+    /** Réclamation sur une machine : la panne la rend indisponible tant qu'elle n'est pas résolue. */
+    private Reclamation creerPourMachine(ReclamationRequest request) {
+        if (request.getType() == null || !request.getType().name().startsWith("MACHINE_")) {
+            throw new tn.softsys.buanderie.exception.BusinessException(
+                    "Type de réclamation machine invalide : " + request.getType());
+        }
+        Machine machine = machineRepository.findByCode(request.getCodeMachine().trim());
+        if (machine == null) {
+            throw new ResourceNotFoundException("Machine", "code", request.getCodeMachine());
+        }
+
+        PersonnelDto declarant = request.getMatriculeAgent() == null || request.getMatriculeAgent().isBlank()
+                ? null : personnelReferentielService.getByCode(request.getMatriculeAgent());
+
+        Reclamation reclamation = Reclamation.builder()
+                .machine(machine)
+                .personnelId(declarant == null ? null : declarant.getId())
+                .personnelNom(declarant == null ? null : declarant.getNomPrenom())
+                .type(request.getType())
+                .description(request.getDescription() == null || request.getDescription().isBlank()
+                        ? null : request.getDescription().trim())
+                .dateCreation(LocalDateTime.now())
+                .status(Reclamation.StatutReclamation.EN_COURS)
+                .build();
+        reclamationRepository.save(reclamation);
+
+        machine.setEtatTechnique(request.getType() == TypeReclamation.MACHINE_EN_PANNE
+                ? tn.softsys.buanderie.entity.enums.EtatTechniqueMachine.EN_PANNE
+                : tn.softsys.buanderie.entity.enums.EtatTechniqueMachine.FONCTIONNEL_AVEC_PROBLEME);
+        machineRepository.save(machine);
+
+        notificationService.notifierReclamationMachine(machine, reclamation);
+        return reclamation;
+    }
+
     public List<Reclamation> getAll(){
         return reclamationRepository.findAll();
     }
@@ -133,6 +178,25 @@ public class ReclamationService {
                 .orElseThrow(() -> new RuntimeException("Réclamation introuvable"));
 
         reclamation.setStatus(newStatus);
+
+        // Machine : la réclamation résolue ou fermée la remet en service
+        if (reclamation.getMachine() != null) {
+            if (newStatus == Reclamation.StatutReclamation.RESOLUE
+                    || newStatus == Reclamation.StatutReclamation.FERMEE) {
+                Machine m = reclamation.getMachine();
+                boolean autreOuverte = reclamationRepository.findAll().stream()
+                        .anyMatch(r -> r.getMachine() != null
+                                && r.getMachine().getId().equals(m.getId())
+                                && !r.getId().equals(reclamation.getId())
+                                && r.getStatus() != Reclamation.StatutReclamation.RESOLUE
+                                && r.getStatus() != Reclamation.StatutReclamation.FERMEE);
+                if (!autreOuverte) {
+                    m.setEtatTechnique(tn.softsys.buanderie.entity.enums.EtatTechniqueMachine.FONCTIONNEL);
+                    machineRepository.save(m);
+                }
+            }
+            return reclamationRepository.save(reclamation);
+        }
 
         // Cas particulier : linge mal lavé
         if (reclamation.getType() == TypeReclamation.MAL_LAVE

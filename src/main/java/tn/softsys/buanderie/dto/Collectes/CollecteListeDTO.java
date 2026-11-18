@@ -1,4 +1,4 @@
-package tn.softsys.buanderie.dto;
+package tn.softsys.buanderie.dto.Collectes;
 
 import lombok.Builder;
 import lombok.Data;

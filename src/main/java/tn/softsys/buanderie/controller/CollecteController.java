@@ -7,7 +7,7 @@ import tn.softsys.buanderie.dto.AjoutLingesCollecteRequest;
 import tn.softsys.buanderie.dto.Collectes.ResumeCollecteDTO;
 import tn.softsys.buanderie.entity.Collecte;
 import tn.softsys.buanderie.repository.CollecteRepository;
-import tn.softsys.buanderie.service.Process.CollecteAjoutManuelService;
+import tn.softsys.buanderie.service.management.CollecteAjoutManuelService;
 import tn.softsys.buanderie.service.management.CollecteResumeService;
 
 import java.util.List;
