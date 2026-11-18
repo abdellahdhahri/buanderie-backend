@@ -35,10 +35,10 @@ public class NotificationService {
     public void notifierUniformeStocke(Linge linge) {
 
         Notification notification = Notification.builder()
-                .titre("Stock uniforme disponible")
+                .titre("Uniforme prêt")
                 .message(
-                        "Un uniforme propre est disponible en stock : "
-                                + linge.getRfidTag()
+                        "Un uniforme est plié et prêt : "
+                                + (linge.getRfidTag() != null ? linge.getRfidTag() : linge.getCodeBarre())
                 )
                 .type("STOCK_UNIFORME")
                 .dateCreation(LocalDateTime.now())

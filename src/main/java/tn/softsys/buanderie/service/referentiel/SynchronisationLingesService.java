@@ -263,6 +263,8 @@ public class SynchronisationLingesService {
                         .designation(d.designation)
                         .etatImmobilisation(d.etatImmobilisation)
                         .categorie(categorie)
+                        .groupeLavage(tn.softsys.buanderie.entity.enums.GroupeLavage
+                                .depuisDesignation(d.designation))
                         .serviceId(d.serviceId)
                         .dateSynchro(maintenant)
                         .build());

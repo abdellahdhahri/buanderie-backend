@@ -1,5 +1,7 @@
 package tn.softsys.buanderie.entity;
 
+import tn.softsys.buanderie.entity.enums.GroupeLavage;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -96,6 +98,14 @@ public class Linge {
     @Column(nullable = false, length = 30)
     private CategLinge categorie;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "groupe_lavage", length = 10)
+    private GroupeLavage groupeLavage;
+
+    /** Dernier cycle de lavage du linge (le bac de tri est libéré dès le lancement). */
+    @Column(name = "cycle_lavage_id")
+    private Long cycleLavageId;
+
 
     @Builder.Default
     @Enumerated(EnumType.STRING)
@@ -188,6 +198,10 @@ public class Linge {
 
     @PrePersist
     public void prePersist() {
+
+        if (this.groupeLavage == null) {
+            this.groupeLavage = GroupeLavage.depuisDesignation(this.designation);
+        }
 
         if (this.source == null) {
             this.source = SourceDonnee.INTERNE;

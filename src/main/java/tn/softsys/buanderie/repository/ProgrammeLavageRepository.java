@@ -13,6 +13,9 @@ public interface ProgrammeLavageRepository extends JpaRepository<ProgrammeLavage
     Optional<ProgrammeLavage> findByNom(String nom);
 
     // Programme de lavage correspondant à une catégorie (déterministe : plus petit id)
+    Optional<ProgrammeLavage> findFirstByGroupeLavageAndTypeOrderByIdAsc(
+            tn.softsys.buanderie.entity.enums.GroupeLavage groupe, TypeProgramme type);
+
     Optional<ProgrammeLavage> findFirstByCategoriesContainingAndTypeOrderByIdAsc(
             CategLinge categorie, TypeProgramme type);
 

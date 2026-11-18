@@ -30,6 +30,7 @@ public class BacDTO {
     private String observations;
     private UsageBac usage;
     private CategLinge categorie;
+    private String groupeLavage;
     private Double poidsBalance;
     private String source;
     private Integer quantiteDeclaree;
@@ -51,6 +52,7 @@ public class BacDTO {
                 .typebac(b.getTypebac())
                 .usage(b.getUsage())
                 .categorie(b.getCategorie())
+                .groupeLavage(b.getGroupeLavage() == null ? null : b.getGroupeLavage().name())
                 .poidsBalance(b.getPoidsBalance())
                 .source(b.getSource())
                 .quantiteDeclaree(b.getQuantiteDeclaree())

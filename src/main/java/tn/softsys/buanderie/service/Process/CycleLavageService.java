@@ -1,5 +1,7 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.entity.enums.GroupeLavage;
+
 import tn.softsys.buanderie.service.referentiel.CubixMachineEtatService;
 
 import tn.softsys.buanderie.dto.BacScanResponse;
@@ -55,6 +57,26 @@ public class CycleLavageService {
     /**
      * Programme de la catégorie dominante du lot ; à défaut, programme par défaut.
      */
+    private GroupeLavage groupeDuBac(Bac bac) {
+        if (bac.getGroupeLavage() != null) return bac.getGroupeLavage();
+        long couleur = lingeRepository.findByBacId(bac.getId()).stream()
+                .filter(l -> (l.getGroupeLavage() != null ? l.getGroupeLavage()
+                        : GroupeLavage.depuisDesignation(l.getDesignation())) == GroupeLavage.COULEUR)
+                .count();
+        long total = lingeRepository.findByBacId(bac.getId()).size();
+        return total > 0 && couleur * 2 > total ? GroupeLavage.COULEUR : GroupeLavage.BLANC;
+    }
+
+    private SuggestionProgramme resoudreProgramme(Bac bac) {
+        GroupeLavage groupe = groupeDuBac(bac);
+        Optional<ProgrammeLavage> deGroupe =
+                programmeRepo.findFirstByGroupeLavageAndTypeOrderByIdAsc(groupe, TypeProgramme.LAVAGE);
+        if (deGroupe.isPresent()) {
+            return new SuggestionProgramme(deGroupe.get(), false);
+        }
+        return resoudreProgramme(bac.getCategorie());
+    }
+
     private SuggestionProgramme resoudreProgramme(CategLinge categorie) {
         if (categorie != null) {
             Optional<ProgrammeLavage> deCategorie =
@@ -120,7 +142,6 @@ public class CycleLavageService {
 
 
             if (item.getTypeSource() == TypeSource.BAC) {
-                terminerBacBlanc(item, cycle);
                 continue;
             }
 
@@ -163,6 +184,10 @@ public class CycleLavageService {
             }
         }
 
+        if (items.stream().anyMatch(i -> i.getTypeSource() == TypeSource.BAC)) {
+            terminerLingesBlanches(cycle, items, codeBac);
+        }
+
         machine.setEtatImmobilisation(EtatImmobilisation.DISPONIBLE);
         machineRepo.save(machine);
 
@@ -179,12 +204,13 @@ public class CycleLavageService {
 
     public BacScanResponse scanBac(String codeBac) {
         Bac bac = resoudreBacDeTri(codeBac);
-        SuggestionProgramme suggestion = resoudreProgramme(bac.getCategorie());
+        SuggestionProgramme suggestion = resoudreProgramme(bac);
         ProgrammeLavage programme = suggestion.programme();
 
         return BacScanResponse.builder()
                 .codeBac(bac.getCode())
                 .categorie(bac.getCategorie())
+                .groupeLavage(groupeDuBac(bac).name())
                 .poids(bac.getPoids())
                 .poidsBalance(bac.getPoidsBalance())
                 .nbLinges(lingeRepository.findByBacId(bac.getId()).size())
@@ -194,7 +220,7 @@ public class CycleLavageService {
                 .description(programme.getDescription())
                 .vitesse(programme.getVitesseEssorageRpm())
                 .duree(programme.getDureeMinutes())
-                .origineProgramme(suggestion.parDefaut() ? "DEFAUT" : "CATEGORIE")
+                .origineProgramme(suggestion.parDefaut() ? "DEFAUT" : "GROUPE")
                 .programmeParDefaut(suggestion.parDefaut())
                 .build();
     }
@@ -230,7 +256,7 @@ public class CycleLavageService {
         }
 
         double poids = poidsDuBac(bac, poidsCharge);
-        ProgrammeLavage programme = resoudreProgramme(bac.getCategorie()).programme();
+        ProgrammeLavage programme = resoudreProgramme(bac).programme();
 
         CycleLavage cycle = cycleRepo.save(
                 CycleLavage.builder()
@@ -242,7 +268,7 @@ public class CycleLavageService {
                         .statut(StatutCycle.EN_COURS)
                         .build());
 
-        mettreBacEnLavage(bac, linges, agent.getId());
+        mettreBacEnLavage(bac, linges, agent.getId(), cycle.getId());
         ajouterBacAuCycle(cycle, bac, poids, linges.size());
 
         machine.setEtatImmobilisation(EtatImmobilisation.EN_COURS);
@@ -271,7 +297,7 @@ public class CycleLavageService {
 
         double poids = poidsDuBac(bac, poidsCharge);
 
-        mettreBacEnLavage(bac, linges, cycle.getPersonnelId());
+        mettreBacEnLavage(bac, linges, cycle.getPersonnelId(), cycle.getId());
 
         double nouveauPoids = cycle.getPoidsCharge() + poids;
         cycle.setPoidsCharge(nouveauPoids);
@@ -317,10 +343,12 @@ public class CycleLavageService {
         return bac.getPoids() != null ? bac.getPoids() : 0.0;
     }
 
-    private void mettreBacEnLavage(Bac bac, List<Linge> linges, Long personnelId) {
+    private void mettreBacEnLavage(Bac bac, List<Linge> linges, Long personnelId, Long cycleId) {
         for (Linge linge : linges) {
             EtatLinge ancienEtat = linge.getEtat();
             linge.setEtat(EtatLinge.EN_LAVAGE);
+            linge.setBac(null);
+            linge.setCycleLavageId(cycleId);
 
             if (linge.getDureVie() != null && linge.getNbLavage() + 1 >= linge.getDureVie()) {
                 notificationService.notifierFinDeVie(linge);
@@ -339,8 +367,90 @@ public class CycleLavageService {
         }
         lingeRepository.saveAll(linges);
 
-        bac.setEtat(EtatBac.EN_LAVAGE);
+        // Le linge est dans la machine : le bac de tri est libéré immédiatement.
+        bac.setEtat(EtatBac.VIDE);
+        bac.setPoids(0.0);
+        bac.setPoidsBalance(null);
+        bac.setGroupeLavage(null);
         bacRepository.save(bac);
+    }
+
+    /**
+     * Fin de lavage (circuit blanc) : les linges du cycle sont déposés dans le bac scanné
+     * (n'importe quel bac, sans contrôle) qui devient prêt pour le séchage.
+     */
+    private void terminerLingesBlanches(CycleLavage cycle, List<CycleLavageItem> items, String codeBac) {
+        List<Linge> linges = new ArrayList<>(lingeRepository.findByCycleLavageId(cycle.getId()));
+
+        // Compatibilité : cycles démarrés avant ce changement (linges encore dans leur bac)
+        for (CycleLavageItem item : items) {
+            if (item.getTypeSource() != TypeSource.BAC || item.getSourceId() == null) continue;
+            Bac bacSource = bacRepository.findById(item.getSourceId()).orElse(null);
+            if (bacSource != null && bacSource.getEtat() == EtatBac.EN_LAVAGE) {
+                for (Linge l : lingeRepository.findByBacId(bacSource.getId())) {
+                    if (linges.stream().noneMatch(x -> x.getId().equals(l.getId()))) {
+                        linges.add(l);
+                    }
+                }
+                bacSource.setEtat(EtatBac.VIDE);
+                bacSource.setPoids(0.0);
+                bacSource.setPoidsBalance(null);
+                bacSource.setGroupeLavage(null);
+                bacRepository.save(bacSource);
+            }
+        }
+
+        if (linges.isEmpty()) return;
+
+        boolean sechageActif = parcoursService.estActive(CodeEtape.SECHAGE);
+        Bac dechargement = null;
+        if (sechageActif) {
+            if (codeBac == null || codeBac.isBlank()) {
+                throw new BusinessException(
+                        "Scannez le bac de déchargement pour terminer ce cycle de lavage.");
+            }
+            String code = codeBac.trim();
+            dechargement = bacRepository.findByCode(code)
+                    .or(() -> bacRepository.findByRfidTag(code))
+                    .orElseThrow(() -> new ResourceNotFoundException("Bac", "code", code));
+        }
+
+        double poidsTotal = 0;
+        for (Linge linge : linges) {
+            EtatLinge ancienEtat = linge.getEtat();
+            linge.setEtat(EtatLinge.LAVE);
+            linge.setNbLavage(linge.getNbLavage() + 1);
+            linge.setBac(dechargement);
+            poidsTotal += linge.getPoids() == null ? 0 : linge.getPoids();
+
+            historiqueLingeRepository.save(
+                    HistoriqueLinge.builder()
+                            .linge(linge)
+                            .etatAvant(ancienEtat)
+                            .etatApres(EtatLinge.LAVE)
+                            .personnelId(cycle.getPersonnelId())
+                            .typeOperation(TypeOperation.FIN_LAVAGE)
+                            .dateOperation(LocalDateTime.now())
+                            .observations("Fin du cycle de lavage"
+                                    + (dechargement != null ? " — déchargé dans le bac " + dechargement.getCode() : ""))
+                            .build());
+        }
+        lingeRepository.saveAll(linges);
+
+        if (dechargement != null) {
+            double base = dechargement.getEtat() == EtatBac.VIDE || dechargement.getPoids() == null
+                    ? 0.0 : dechargement.getPoids();
+            long couleur = linges.stream()
+                    .filter(l -> (l.getGroupeLavage() != null ? l.getGroupeLavage()
+                            : GroupeLavage.depuisDesignation(l.getDesignation())) == GroupeLavage.COULEUR)
+                    .count();
+            dechargement.setGroupeLavage(couleur * 2 > linges.size() ? GroupeLavage.COULEUR : GroupeLavage.BLANC);
+            dechargement.setEtat(EtatBac.EN_ATTENTE_SECHAGE);
+            dechargement.setPoids(base + poidsTotal);
+            dechargement.setPoidsBalance(null);
+            dechargement.setSource("CYCLE:" + cycle.getId());
+            bacRepository.save(dechargement);
+        }
     }
 
     private void ajouterBacAuCycle(CycleLavage cycle, Bac bac, double poids, int quantite) {
@@ -354,43 +464,6 @@ public class CycleLavageService {
                         .build());
     }
 
-    private void terminerBacBlanc(CycleLavageItem item, CycleLavage cycle) {
-        Bac bac = bacRepository.findById(item.getSourceId())
-                .orElseThrow(() -> new ResourceNotFoundException("Bac introuvable"));
-
-        List<Linge> linges = lingeRepository.findByBacId(bac.getId());
-
-        for (Linge linge : linges) {
-            EtatLinge ancienEtat = linge.getEtat();
-            linge.setEtat(EtatLinge.LAVE);
-            linge.setNbLavage(linge.getNbLavage() + 1);
-
-            historiqueLingeRepository.save(
-                    HistoriqueLinge.builder()
-                            .linge(linge)
-                            .etatAvant(ancienEtat)
-                            .etatApres(EtatLinge.LAVE)
-                            .personnelId(cycle.getPersonnelId())
-                            .typeOperation(TypeOperation.FIN_LAVAGE)
-                            .dateOperation(LocalDateTime.now())
-                            .observations("Fin du cycle de lavage")
-                            .build());
-        }
-
-        if (parcoursService.estActive(CodeEtape.SECHAGE)) {
-            lingeRepository.saveAll(linges);
-            bac.setEtat(EtatBac.EN_ATTENTE_SECHAGE);
-        } else {
-            for (Linge linge : linges) {
-                linge.setBac(null);
-            }
-            lingeRepository.saveAll(linges);
-            bac.setPoids(0.0);
-            bac.setPoidsBalance(null);
-            bac.setEtat(EtatBac.VIDE);
-        }
-        bacRepository.save(bac);
-    }
 
 //    private void historiserLavage(Linge linge, Agent agent, EtatLinge nouvelEtat) {
 //        HistoriqueLinge historique = HistoriqueLinge.builder()
@@ -424,12 +497,23 @@ public class CycleLavageService {
         List<CycleLavageItem> items = itemRepo.findByCycleLavage_Id(cycleId);
 
         List<Map<String, Object>> result = new java.util.ArrayList<>();
+        boolean blancDejaListe = false;
 
         for (CycleLavageItem item : items) {
             if (item.getSourceId() == null) continue;
 
             List<Linge> linges;
-            if (item.getTypeSource() == TypeSource.BAC_INFECTE || item.getTypeSource() == TypeSource.BAC) {
+            if (item.getTypeSource() == TypeSource.BAC) {
+                if (blancDejaListe) {
+                    linges = new ArrayList<>();
+                } else {
+                    blancDejaListe = true;
+                    linges = lingeRepository.findByCycleLavageId(cycleId);
+                    if (linges.isEmpty()) {
+                        linges = lingeRepository.findByBacId(item.getSourceId());
+                    }
+                }
+            } else if (item.getTypeSource() == TypeSource.BAC_INFECTE) {
                 linges = lingeRepository.findByBacId(item.getSourceId());
             } else {
                 linges = new ArrayList<>();

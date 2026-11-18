@@ -1,5 +1,7 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.entity.enums.GroupeLavage;
+
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -71,12 +73,16 @@ public class TriService {
                     + " » n'est pas ouvert au tri (état : " + bac.getEtat() + ").");
         }
 
-        if (bac.getCategorie() == null) {
-            throw new BusinessException("Le bac « " + bac.getCode()
-                    + " » n'a pas de catégorie : définissez-la pour trier par catégorie.");
-        }
-        if (bac.getCategorie() != linge.getCategorie()) {
-            throw new BusinessException("Le bac n'est pas destiné à cette catégorie.");
+        GroupeLavage groupeLinge = groupeDuLinge(linge);
+        if (bac.getEtat() == EtatBac.VIDE) {
+            bac.setGroupeLavage(groupeLinge);
+        } else {
+            GroupeLavage groupeBac = groupeDuBac(bac);
+            if (groupeBac != groupeLinge) {
+                throw new BusinessException("Ce bac contient du linge " + groupeBac
+                        + " : ce linge est " + groupeLinge + ". Utilisez un autre bac.");
+            }
+            bac.setGroupeLavage(groupeBac);
         }
         if (bac.getTypeCollecte() != linge.getTypeCollecte()) {
             throw new BusinessException("Le type de collecte ne correspond pas.");
@@ -118,13 +124,29 @@ public class TriService {
                     "Le linge n'est pas prêt pour le tri (état actuel : " + linge.getEtat() + ").");
         }
 
+        GroupeLavage groupeLinge = groupeDuLinge(linge);
         return bacRepository.findByUsage(UsageBac.TRI).stream()
-                .filter(b -> b.getCategorie() != null && b.getCategorie() == linge.getCategorie())
                 .filter(b -> b.getTypeCollecte() == linge.getTypeCollecte())
-                .filter(b -> b.getEtat() == EtatBac.VIDE || b.getEtat() == EtatBac.EN_TRI)
-                .sorted(Comparator.comparing(b -> b.getPoids() == null ? 0.0 : b.getPoids()))
+                .filter(b -> b.getEtat() == EtatBac.VIDE
+                        || (b.getEtat() == EtatBac.EN_TRI && groupeDuBac(b) == groupeLinge))
+                .sorted(Comparator
+                        .comparing((Bac b) -> b.getEtat() == EtatBac.VIDE ? 1 : 0)
+                        .thenComparing(b -> b.getPoids() == null ? 0.0 : b.getPoids()))
                 .map(this::versDto)
                 .toList();
+    }
+
+    private GroupeLavage groupeDuLinge(Linge linge) {
+        return linge.getGroupeLavage() != null
+                ? linge.getGroupeLavage()
+                : GroupeLavage.depuisDesignation(linge.getDesignation());
+    }
+
+    /** Groupe du bac : celui enregistré, sinon celui de ses linges, sinon BLANC. */
+    private GroupeLavage groupeDuBac(Bac bac) {
+        if (bac.getGroupeLavage() != null) return bac.getGroupeLavage();
+        return lingeRepository.findByBacId(bac.getId()).stream()
+                .findFirst().map(this::groupeDuLinge).orElse(GroupeLavage.BLANC);
     }
 
     private Set<EtatLinge> etatsAcceptesTri() {

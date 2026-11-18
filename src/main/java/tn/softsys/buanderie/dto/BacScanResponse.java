@@ -14,6 +14,7 @@ public class BacScanResponse {
 
     private String codeBac;
     private CategLinge categorie;
+    private String groupeLavage;
     private Double poids;
     private Double poidsBalance;
     private Integer nbLinges;

@@ -1,5 +1,9 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.entity.enums.CategLinge;
+
+import tn.softsys.buanderie.service.Reporting.NotificationService;
+
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -35,6 +39,7 @@ public class PliageService {
     private final HistoriqueLingeRepository historiqueRepository;
     private final PersonnelRepository personnelRepository;
     private final ParcoursService parcoursService;
+    private final NotificationService notificationService;
 
     @Transactional
     public Linge plier(PliageRequest request) {
@@ -72,6 +77,10 @@ public class PliageService {
                 EtatLinge.PLIE,
                 "Pliage"
         );
+
+        if (linge.getCategorie() == CategLinge.UNIFORME) {
+            notificationService.notifierUniformeStocke(linge);
+        }
 
         return linge;
     }

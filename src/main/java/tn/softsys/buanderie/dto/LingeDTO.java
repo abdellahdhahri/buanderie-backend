@@ -8,6 +8,8 @@ public class LingeDTO {
 
     private Long id;
     private String categorie;
+    private String designation;
+    private String groupeLavage;
     private Long chambre_id;
     private Double poids;
     private EtatLinge etat;

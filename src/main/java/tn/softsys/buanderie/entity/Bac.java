@@ -1,5 +1,7 @@
 package tn.softsys.buanderie.entity;
 
+import tn.softsys.buanderie.entity.enums.GroupeLavage;
+
 import tn.softsys.buanderie.entity.enums.SourceDonnee;
 
 import tn.softsys.buanderie.entity.enums.CategLinge;
@@ -66,6 +68,10 @@ public class Bac {
     @Column(name = "categorie", length = 40)
     private CategLinge categorie;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "groupe_lavage", length = 10)
+    private GroupeLavage groupeLavage;
+
     @Column(name = "poids_balance")
     private Double poidsBalance;
 
@@ -77,10 +83,15 @@ public class Bac {
 
     @Column(name = "detail_quantites", length = 300)
     private String detailQuantites;
-
+    //    @ManyToOne
+//    @JoinColumn(name = "service_id")
+//    @JsonIgnore
+//
+//    private ServiceEntity service;
     @Column(unique = true)
     private String rfidTag;
 
+    // Bac importé de CUBIX (Linge_Bac) : désignation, origine et identifiant externe
     @Column(length = 255)
     private String designation;
 

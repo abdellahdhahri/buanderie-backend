@@ -290,6 +290,8 @@ public class LingeService {
                                 ? linge.getCategorie().name()
                                 : null
                 )
+                .designation(linge.getDesignation())
+                .groupeLavage(linge.getGroupeLavage() != null ? linge.getGroupeLavage().name() : null)
                 .chambre_id(linge.getChambreId())
                 .poids(linge.getPoids())
                 .etat(linge.getEtat())
@@ -385,6 +387,16 @@ public class LingeService {
                 linge.setCategorie(CategLinge.valueOf(dto.getCategorie()));
             } catch (IllegalArgumentException e) {
                 throw new BusinessException("Catégorie invalide: " + dto.getCategorie());
+            }
+        }
+
+        if (dto.getGroupeLavage() != null) {
+            try {
+                linge.setGroupeLavage(tn.softsys.buanderie.entity.enums.GroupeLavage
+                        .valueOf(dto.getGroupeLavage().trim().toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                throw new BusinessException("Groupe de lavage invalide: " + dto.getGroupeLavage()
+                        + " (BLANC ou COULEUR)");
             }
         }
 

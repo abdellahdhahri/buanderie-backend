@@ -75,6 +75,9 @@ public class ProgrammeService {
         if (data.getParDefaut() != null) {
             existing.setParDefaut(data.getParDefaut());
         }
+        if (data.getGroupeLavage() != null) {
+            existing.setGroupeLavage(data.getGroupeLavage());
+        }
 
         validateProgrammeLavage(existing);
         if (Boolean.TRUE.equals(existing.getParDefaut())) {

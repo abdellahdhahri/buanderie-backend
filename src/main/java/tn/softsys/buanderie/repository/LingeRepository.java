@@ -20,6 +20,7 @@ public interface LingeRepository extends JpaRepository<Linge, Long>, JpaSpecific
 
     Optional<Linge> findByCodeBarre(String codeBarre);
     List<Linge>     findByBacId(Long bacId);
+    List<Linge>     findByCycleLavageId(Long cycleLavageId);
     List<Linge>     findByEtat(EtatLinge etat);
     boolean         existsByCodeBarre(String codeBarre);
     List<Linge>     findByBac_Code(String code);

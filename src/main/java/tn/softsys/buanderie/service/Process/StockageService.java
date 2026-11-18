@@ -70,10 +70,6 @@ public class StockageService {
         linge.setEmplacement(arsenal);
 
         linge = lingeRepository.save(linge);
-        if(linge.getCategorie()==CategLinge.UNIFORME){
-
-            notificationService.notifierUniformeStocke(linge);
-        }
         Long service = linge.getServiceId();
         linge.setEmplacement(arsenal);
         creerHistorique(

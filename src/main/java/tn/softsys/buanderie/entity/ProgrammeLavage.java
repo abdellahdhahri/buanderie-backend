@@ -39,6 +39,10 @@ public class ProgrammeLavage {
     private TypeProgramme type;
 
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "groupe_lavage", length = 10)
+    private tn.softsys.buanderie.entity.enums.GroupeLavage groupeLavage;
+
     @Column(name = "par_defaut", columnDefinition = "boolean default false")
     @Builder.Default
     private Boolean parDefaut = false;
