@@ -10,6 +10,11 @@ import java.util.Optional;
 
 public interface ProgrammeSechageRepository extends JpaRepository<ProgrammeSechage, Long> {
 
+    Optional<ProgrammeSechage> findFirstByGroupeLavageOrderByIdAsc(
+            tn.softsys.buanderie.entity.enums.GroupeLavage groupe);
+
+    Optional<ProgrammeSechage> findFirstByOrderByIdAsc();
+
     @Query("SELECT p FROM ProgrammeSechage p WHERE :cat MEMBER OF p.categories")
     Optional<ProgrammeSechage> findByCategoriesContaining(@Param("cat") CategLinge categorie);
 }

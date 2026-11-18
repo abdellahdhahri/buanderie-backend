@@ -33,6 +33,10 @@ public class ProgrammeSechage {
     @Column(length = 200)
     private String description;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "groupe_lavage", length = 10)
+    private tn.softsys.buanderie.entity.enums.GroupeLavage groupeLavage;
+
     @ElementCollection(targetClass = CategLinge.class)
     @Enumerated(EnumType.STRING)
     @CollectionTable(

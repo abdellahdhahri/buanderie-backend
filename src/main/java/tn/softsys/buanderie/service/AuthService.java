@@ -42,11 +42,7 @@ public class AuthService {
 
 
 
-    /**
-     * Connexion avec un compte CUBIX : Login/Mobile donne un jeton, gardé côté serveur pour cet utilisateur
-     * (il sert ensuite aux appels d'intégration). L'identité vient de Ping, les droits des étapes où la
-     * personne est habilitée (Etapes). Le navigateur ne reçoit que le JWT de cette application.
-     */
+
     public LoginResponseDTO login(String login, String password) {
 
         if (login == null || login.isBlank()) {
@@ -58,14 +54,28 @@ public class AuthService {
 
         String identifiant = login.trim();
         CubixClient.Connexion connexion = cubixClient.seConnecter(identifiant, password);
-        String jeton = connexion.jeton();
+        return ouvrirSession(identifiant, connexion.jeton(), connexion.privileges());
+    }
 
+    /** Connexion par badge : CUBIX donne le jeton du compte lié au badge (voir Login/MobileBadge). */
+    public LoginResponseDTO loginByBadge(String codeBarre) {
+        if (codeBarre == null || codeBarre.isBlank()) {
+            throw new BusinessException("Code barre obligatoire");
+        }
+        CubixClient.ConnexionBadge connexion = cubixClient.seConnecterParBadge(codeBarre);
+        return ouvrirSession(connexion.login(), connexion.jeton(), connexion.privileges());
+    }
+
+    private LoginResponseDTO ouvrirSession(String identifiant, String jeton, List<String> privileges) {
         CubixClient.Identite identite = cubixClient.ping(jeton);
         List<CubixClient.Etape> etapes = cubixClient.etapes(jeton);
 
         boolean admin = identite.administrateur();
+        if (!admin && (privileges == null || privileges.isEmpty())) {
+            throw new BusinessException("Votre compte n'a aucun droit d'accès au module Buanderie. "
+                    + "Demandez à un administrateur de vous attribuer un privilège (LIG...).");
+        }
         List<CubixClient.Etape> habilitees = etapesHabilitees(admin, identite.id(), etapes);
-        List<String> privileges = connexion.privileges();
         List<Map<String, Object>> etapesDto = new ArrayList<>();
         for (CubixClient.Etape e : habilitees) {
             Map<String, Object> m = new java.util.LinkedHashMap<>();
@@ -101,256 +111,4 @@ public class AuthService {
         return res;
     }
 
-    //login par badge
-
-    public LoginResponseDTO loginByBadge(String codeBarre) {
-
-        if (codeBarre == null || codeBarre.isBlank()) {
-            throw new RuntimeException("Code barre obligatoire");
-        }
-
-        String loginUrl =
-                baseUrl + "/Login/LoginByBadge";
-
-        MultiValueMap<String, String> form =
-                new LinkedMultiValueMap<>();
-
-        form.add("codeBarre", codeBarre);
-
-        HttpHeaders headers =
-                new HttpHeaders();
-
-        headers.setContentType(
-                MediaType.APPLICATION_FORM_URLENCODED
-        );
-
-        HttpEntity<MultiValueMap<String, String>> request =
-                new HttpEntity<>(form, headers);
-
-        ResponseEntity<Map> response;
-
-        try {
-
-            response = restTemplate.exchange(
-                    loginUrl,
-                    HttpMethod.POST,
-                    request,
-                    Map.class
-            );
-
-        } catch (Exception e) {
-
-            throw new RuntimeException(
-                    "Erreur lors de l'authentification par badge ASP.NET",
-                    e
-            );
-        }
-
-        Map data = response.getBody();
-
-        if (data == null) {
-            throw new RuntimeException(
-                    "Réponse ASP.NET vide"
-            );
-        }
-
-        Boolean success = (Boolean) data.get("success");
-
-        if (!Boolean.TRUE.equals(success)) {
-
-            String message =
-                    data.get("message") != null
-                            ? data.get("message").toString()
-                            : "Badge non reconnu";
-
-            throw new RuntimeException(message);
-        }
-
-
-        Map user =
-                (Map) data.get("user");
-
-        if (user == null) {
-            throw new RuntimeException(
-                    "Utilisateur introuvable"
-            );
-        }
-
-        String login =
-                user.get("login") != null
-                        ? user.get("login").toString()
-                        : null;
-
-        boolean admin =
-                Boolean.TRUE.equals(
-                        user.get("administrateur")
-                );
-
-
-        List<String> privileges =
-                new ArrayList<>();
-
-        Object privilegesObject =
-                data.get("privileges");
-
-        if (privilegesObject instanceof List) {
-
-            for (Object privilege : (List<?>) privilegesObject) {
-
-                if (privilege != null) {
-
-                    String code =
-                            privilege.toString().trim();
-
-                    if (!code.isEmpty() &&
-                            !privileges.contains(code)) {
-
-                        privileges.add(code);
-                    }
-                }
-            }
-        }
-
-        Long userId = null;
-
-        if (user.get("id") != null) {
-            userId = ((Number) user.get("id")).longValue();
-        }
-
-
-
-        String nomPrenom =
-                user.get("nomPrenom") != null
-                        ? user.get("nomPrenom").toString()
-                        : null;
-
-        String codeBarreUser =
-                user.get("codeBarre") != null
-                        ? user.get("codeBarre").toString()
-                        : null;
-
-
-
-        boolean hasBuanderieAccess =
-                admin ||
-                        privileges.contains("LIG0");
-
-        if (!hasBuanderieAccess) {
-
-            throw new RuntimeException(
-                    "Accès refusé au module Buanderie"
-            );
-        }
-        UserDTO userDTO =
-                new UserDTO(
-                        userId,
-                        login,
-                        nomPrenom,
-                        codeBarreUser,
-                        null,
-                        null
-
-                );
-
-        SecurityUser securityUser =
-                new SecurityUser(
-                        login,
-                        admin,
-                        privileges
-                );
-
-
-        String token =
-                jwtService.generateToken(securityUser);
-        return new LoginResponseDTO(
-                token,
-                login,
-                admin,
-                privileges,
-                codeBarreUser,
-                userDTO
-        );
-    }
-
-
-
-
-
-    //retourner l utilisateur connectée
-    private UserDTO getCurrentUser(String sessionId) {
-
-        String currentUserUrl =
-                baseUrl + "/Login/CurrentUser";
-
-        HttpHeaders headers = new HttpHeaders();
-
-        headers.add(
-                HttpHeaders.COOKIE,
-                "ASP.NET_SessionId=" + sessionId
-        );
-
-        HttpEntity<Void> request =
-                new HttpEntity<>(headers);
-
-        ResponseEntity<Map> response;
-
-        try {
-            response = restTemplate.exchange(
-                    currentUserUrl,
-                    HttpMethod.GET,
-                    request,
-                    Map.class
-            );
-        } catch (Exception e) {
-            throw new RuntimeException(
-                    "Impossible de récupérer l'utilisateur connecté ASP.NET",
-                    e
-            );
-        }
-
-        Map data = response.getBody();
-
-        if (data == null) {
-            throw new RuntimeException(
-                    "Réponse CurrentUser ASP.NET vide"
-            );
-        }
-
-        Long id = null;
-
-        if (data.get("id") != null) {
-            id = ((Number) data.get("id")).longValue();
-        }
-
-        String login =
-                data.get("login") != null
-                        ? data.get("login").toString()
-                        : null;
-
-        String nomPrenom =
-                data.get("nomPrenom") != null
-                        ? data.get("nomPrenom").toString()
-                        : null;
-
-        String codeBarre =
-                data.get("codeBarre") != null
-                        ? data.get("codeBarre").toString()
-                        : null;
-
-        Long serviceId = null;
-
-        if (data.get("serviceId") != null) {
-            serviceId =
-                    ((Number) data.get("serviceId")).longValue();
-        }
-
-        return new UserDTO(
-                id,
-                login,
-                nomPrenom,
-                codeBarre,
-                serviceId,
-                null
-        );
-    }
 }

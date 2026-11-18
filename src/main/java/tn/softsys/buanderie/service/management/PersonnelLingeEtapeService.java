@@ -16,6 +16,8 @@ public class PersonnelLingeEtapeService {
 
     private final PersonnelLingeEtapeRepository personnelLingeEtapeRepository;
     private final PersonnelRepository personnelRepository;
+    private final tn.softsys.buanderie.repository.LingeEtapeRepository lingeEtapeRepository;
+    private final tn.softsys.buanderie.service.referentiel.CubixAffectationService cubixAffectation;
 
 
 
@@ -89,6 +91,12 @@ public class PersonnelLingeEtapeService {
                     "Ce personnel est déjà affecté à cette étape"
             );
         }
+
+        // Mode CUBIX : l'affectation est d'abord enregistrée dans CUBIX (administrateur requis)
+        Personnel personnel = personnelRepository.findById(personnelLingeEtape.getPersonnelId()).orElse(null);
+        tn.softsys.buanderie.entity.LingeEtape etape =
+                lingeEtapeRepository.findById(personnelLingeEtape.getLingeEtapeId()).orElse(null);
+        cubixAffectation.affecter(personnel, etape);
 
         return personnelLingeEtapeRepository.save(
                 personnelLingeEtape

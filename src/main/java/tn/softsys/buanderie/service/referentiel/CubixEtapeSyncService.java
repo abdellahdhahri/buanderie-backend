@@ -1,5 +1,7 @@
 package tn.softsys.buanderie.service.referentiel;
 
+import tn.softsys.buanderie.service.management.OperationsEtape;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -32,13 +34,22 @@ import tn.softsys.buanderie.repository.EnvoiCubixRepository;
 import tn.softsys.buanderie.repository.PersonnelRepository;
 import tn.softsys.buanderie.security.CubixTokenStore;
 
-
+/**
+ * Reporte dans CUBIX (ValiderEtape) le tri, le pliage, le stockage et la livraison d'un linge importé de CUBIX.
+ * Non bloquant : l'opération locale est déjà validée ; en cas d'échec, l'envoi est mis en attente (table envois_cubix)
+ * et peut être renvoyé. Le lavage et le séchage ne passent pas ici (ils sont bloquants, voir CubixMachineEtatService).
+ */
 @Slf4j
 @Service
 public class CubixEtapeSyncService {
 
     private static final String MOTIF = "Synchronisation Buanderie";
+    /** Catégories d'étape CUBIX : 0 collage, 1 réception, 2 tri, 5 pliage, 6 stockage, 7 livraison. */
     private static final Map<TypeOperation, Integer> CATEGORIES = Map.of(
+            TypeOperation.COLLECTE, 0,
+            TypeOperation.DECLARATION_SAC_INFECTE, 0,
+            TypeOperation.RECEPTION_BAC, 1,
+            TypeOperation.RECEPTION_SAC_INFECTE, 1,
             TypeOperation.TRI, 2,
             TypeOperation.PLIAGE, 5,
             TypeOperation.MISE_EN_STOCKAGE, 6,
@@ -75,7 +86,10 @@ public class CubixEtapeSyncService {
         this.transactionNouvelle.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-
+    /**
+     * Appelé à l'écriture d'une ligne d'historique : prépare l'envoi (sans requête de lecture lourde) puis le
+     * déclenche après la validation de la transaction locale. Ne lève jamais d'exception.
+     */
     public void planifier(HistoriqueLinge h) {
         try {
             Integer categorie = h == null ? null : CATEGORIES.get(h.getTypeOperation());
@@ -101,12 +115,22 @@ public class CubixEtapeSyncService {
                 }
             }
 
+            if (h.getTypeOperation() == TypeOperation.COLLECTE) {
+                envoi.setBacIdExterne("0");    // collage : 0 = blanc
+            }
+            if (h.getTypeOperation() == TypeOperation.DECLARATION_SAC_INFECTE) {
+                envoi.setBacIdExterne("-1");   // collage : -1 = infecté
+            }
+
             if (h.getTypeOperation() == TypeOperation.TRI) {
-                if (linge.getBac() == null || linge.getBac().getSourceDonnee() != SourceDonnee.EXTERNE
-                        || linge.getBac().getIdExterne() == null) {
-                    return;   // bac de tri local : CUBIX n'en a pas l'équivalent
+                if (linge.getBac() != null && linge.getBac().getSourceDonnee() == SourceDonnee.EXTERNE
+                        && linge.getBac().getIdExterne() != null) {
+                    envoi.setBacIdExterne(linge.getBac().getIdExterne());
+                } else {
+                    log.info("Tri non envoyé à CUBIX (linge {}) : le bac de tri n'est pas un bac importé de CUBIX.",
+                            linge.getIdExterne());
+                    return;
                 }
-                envoi.setBacIdExterne(linge.getBac().getIdExterne());
             }
 
             if (h.getTypeOperation() == TypeOperation.LIVRAISON) {
@@ -117,6 +141,8 @@ public class CubixEtapeSyncService {
                     }
                 }
                 if (envoi.getChambreCodeBarre() == null) {
+                    log.info("Livraison non envoyée à CUBIX (linge {}) : aucune chambre (code-barres) connue.",
+                            linge.getIdExterne());
                     return;
                 }
             }
@@ -249,6 +275,13 @@ public class CubixEtapeSyncService {
             throw new BusinessException(
                     "Le renvoi vers CUBIX n'est disponible qu'en mode externe, connecteur CUBIX, authentification CUBIX.");
         }
+    }
+
+    private String tronquerTexte(String texte, int max) {
+        if (texte == null) {
+            return null;
+        }
+        return texte.length() > max ? texte.substring(0, max) : texte;
     }
 
     private String tronquer(String message) {

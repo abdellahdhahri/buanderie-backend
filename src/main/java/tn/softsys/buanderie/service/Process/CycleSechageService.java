@@ -1,5 +1,7 @@
 package tn.softsys.buanderie.service.Process;
 
+import tn.softsys.buanderie.entity.enums.GroupeLavage;
+
 import tn.softsys.buanderie.service.referentiel.CubixMachineEtatService;
 
 import tn.softsys.buanderie.dto.BacScanResponse;
@@ -91,6 +93,7 @@ public class CycleSechageService {
         return BacScanResponse.builder()
                 .codeBac(bac.getCode())
                 .categorie(bac.getCategorie())
+                .groupeLavage(groupeDuBac(bac).name())
                 .poids(bac.getPoids())
                 .poidsBalance(bac.getPoidsBalance())
                 .nbLinges(lingeRepository.findByBacId(bac.getId()).size())
@@ -230,12 +233,24 @@ public class CycleSechageService {
         }
     }
 
+    private GroupeLavage groupeDuBac(Bac bac) {
+        if (bac.getGroupeLavage() != null) return bac.getGroupeLavage();
+        List<Linge> linges = lingeRepository.findByBacId(bac.getId());
+        long couleur = linges.stream()
+                .filter(l -> (l.getGroupeLavage() != null ? l.getGroupeLavage()
+                        : GroupeLavage.depuisDesignation(l.getDesignation())) == GroupeLavage.COULEUR)
+                .count();
+        return !linges.isEmpty() && couleur * 2 > linges.size() ? GroupeLavage.COULEUR : GroupeLavage.BLANC;
+    }
+
+    /** Programme du groupe du bac ; à défaut celui de sa catégorie (ancien mode), sinon le premier programme. */
     private ProgrammeSechage programmePourBac(Bac bac) {
-        if (bac.getCategorie() == null) {
-            throw new BusinessException("Le bac « " + bac.getCode()
-                    + " » n'a pas de catégorie : impossible de choisir le programme de séchage.");
-        }
-        return suggestProgramme(bac.getCategorie());
+        return programmeRepo.findFirstByGroupeLavageOrderByIdAsc(groupeDuBac(bac))
+                .or(() -> bac.getCategorie() == null ? java.util.Optional.empty()
+                        : programmeRepo.findByCategoriesContaining(bac.getCategorie()))
+                .or(() -> programmeRepo.findFirstByOrderByIdAsc())
+                .orElseThrow(() -> new BusinessException(
+                        "Aucun programme de séchage n'est défini. Créez au moins un programme de séchage."));
     }
 
     private double poidsDuBac(Bac bac, Double poidsCharge) {

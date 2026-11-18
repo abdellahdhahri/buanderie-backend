@@ -22,12 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import tn.softsys.buanderie.exception.BusinessException;
 
-/**
- * Appels d'authentification à CUBIX :
- * {@code GET /Login/Mobile?a=<login>&b=<mot de passe>&v=1} renvoie {@code ["-[OK]-","<jeton>",…]} ;
- * le jeton s'envoie ensuite dans l'en-tête {@code X-Cubix-Token}, tel que renvoyé.
- * Ni le mot de passe ni le jeton ne sont écrits dans les journaux ou les messages d'erreur.
- */
+
 @Slf4j
 @Component
 public class CubixClient {
@@ -37,6 +32,9 @@ public class CubixClient {
 
     /** Réponse de Login/Mobile : le jeton et les codes de privilège (LIG…) qui suivent dans le tableau. */
     public record Connexion(String jeton, List<String> privileges) { }
+
+    /** Réponse de Login/MobileBadge : jeton, login du compte, droits. */
+    public record ConnexionBadge(String jeton, String login, boolean administrateur, List<String> privileges) { }
 
     public record Identite(Long id, String nom, boolean administrateur, String codeBarre) { }
 
@@ -51,6 +49,10 @@ public class CubixClient {
 
     @Value("${cubix.chemin-login:/Login/Mobile}")
     private String cheminLogin;
+
+    /** Clé partagée avec CUBIX (web.config : CleBadge) : seul ce serveur peut demander une connexion par badge. */
+    @Value("${cubix.cle-badge:}")
+    private String cleBadge;
 
     @Value("${cubix.chemin-api:/BuanderieApi}")
     private String cheminApi;
@@ -107,6 +109,57 @@ public class CubixClient {
         return new Connexion(racine.get(1).asText().trim(), privileges);
     }
 
+    /** Connexion par badge : CUBIX renvoie le même jeton qu'avec login et mot de passe, sans que le mot de passe circule. */
+    public ConnexionBadge seConnecterParBadge(String codeBarre) {
+        if (cleBadge == null || cleBadge.isBlank()) {
+            throw new BusinessException("Connexion par badge non configurée : définissez cubix.cle-badge (CUBIX_CLE_BADGE).");
+        }
+        org.springframework.util.LinkedMultiValueMap<String, String> form = new org.springframework.util.LinkedMultiValueMap<>();
+        form.add("c", codeBarre.trim());
+        form.add("k", cleBadge);
+        HttpHeaders h = new HttpHeaders();
+        h.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        h.setAccept(List.of(MediaType.ALL));
+
+        String corps;
+        try {
+            corps = restTemplate.exchange(URI.create(base() + cheminLogin + "Badge"), HttpMethod.POST,
+                    new HttpEntity<>(form, h), String.class).getBody();
+        } catch (HttpStatusCodeException e) {
+            int s = e.getStatusCode().value();
+            if (s == 403) {
+                throw new BusinessException("CUBIX a refusé la connexion par badge : clé (cubix.cle-badge) incorrecte.");
+            }
+            throw new BusinessException("Connexion par badge à CUBIX impossible : HTTP " + s
+                    + (s == 404 ? " (Login/MobileBadge absent : mettez CUBIX à jour)." : "."));
+        } catch (ResourceAccessException e) {
+            throw new BusinessException("CUBIX injoignable : adresse erronée, serveur arrêté ou délai dépassé.");
+        }
+
+        JsonNode r;
+        try {
+            r = objectMapper.readTree(corps == null ? "" : corps);
+        } catch (Exception e) {
+            throw new BusinessException("Réponse de connexion par badge non reconnue : JSON attendu.");
+        }
+        if (!r.path("ok").asBoolean(false)) {
+            throw new BusinessException(r.path("message").asText("Badge non reconnu"));
+        }
+        String jeton = r.path("jeton").asText("").trim();
+        String login = r.path("login").asText("").trim();
+        if (jeton.isEmpty() || login.isEmpty()) {
+            throw new BusinessException("CUBIX n'a renvoyé ni jeton ni login pour ce badge.");
+        }
+        List<String> privileges = new ArrayList<>();
+        for (JsonNode p : r.path("privileges")) {
+            String code = p.asText().trim();
+            if (code.startsWith("LIG") && !privileges.contains(code)) {
+                privileges.add(code);
+            }
+        }
+        return new ConnexionBadge(jeton, login, r.path("administrateur").asBoolean(false), privileges);
+    }
+
     /** Vérifie le jeton et donne l'utilisateur (Ping). */
     public Identite ping(String jeton) {
         JsonNode racine = get("/Ping", jeton);
@@ -131,6 +184,9 @@ public class CubixClient {
     // ------------------------------------------------------------------------------------------
 
     private JsonNode get(String action, String jeton) {
+        if (jeton == null || jeton.isBlank()) {
+            throw new BusinessException("Session CUBIX absente ou expirée (le serveur a peut-être redémarré) : déconnectez-vous puis reconnectez-vous.");
+        }
         try {
             String corps = restTemplate.exchange(URI.create(base() + cheminApi + action), HttpMethod.GET,
                     new HttpEntity<>(entetes(jeton)), String.class).getBody();
@@ -157,7 +213,8 @@ public class CubixClient {
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            throw new BusinessException("Réponse CUBIX non reconnue sur " + action + " : JSON attendu.");
+            throw new BusinessException("Réponse CUBIX non reconnue sur " + action
+                    + " : JSON attendu (jeton expiré ? reconnectez-vous).");
         }
     }
 

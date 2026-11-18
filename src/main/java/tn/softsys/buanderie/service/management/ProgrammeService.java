@@ -138,6 +138,10 @@ public class ProgrammeService {
             existing.setCategories(data.getCategories());
         }
 
+        if (data.getGroupeLavage() != null) {
+            existing.setGroupeLavage(data.getGroupeLavage());
+        }
+
         validateProgrammeSechage(existing);
         return sechageRepo.save(existing);
     }
