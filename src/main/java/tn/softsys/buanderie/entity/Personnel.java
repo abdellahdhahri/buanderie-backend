@@ -53,6 +53,10 @@ public class Personnel {
 
     private Long serviceId;
 
+    /** Service d'affectation saisi ici (étage, secteur…) : jamais écrasé par la synchronisation CUBIX. */
+    @Column(name = "service_affectation_id")
+    private Long serviceAffectationId;
+
     @Builder.Default
     @Column(nullable = false)
     private Boolean actif = true;

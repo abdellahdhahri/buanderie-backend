@@ -37,6 +37,14 @@ public class SynchronisationLitsInfectesService {
 
     private final Object verrou = new Object();
 
+    /** Au plus ce nombre de lits peut redevenir « non infecté » en une synchronisation, sans autre contrôle. */
+    @org.springframework.beans.factory.annotation.Value("${lits-infectes.retraits-autorises:5}")
+    private int retraitsAutorises;
+
+    /** Au-delà, la synchronisation est refusée si plus de ce pourcentage des lits infectés est retiré d'un coup. */
+    @org.springframework.beans.factory.annotation.Value("${lits-infectes.seuil-retrait-pct:50}")
+    private int seuilRetraitPct;
+
     public SynchronisationLitsInfectesService(
             IntegrationService integrationService,
             ConnecteurRest connecteur,
@@ -79,7 +87,8 @@ public class SynchronisationLitsInfectesService {
                     }
                 }
 
-                int[] c = transactionTemplate.execute(status -> appliquer(infectes));
+                List<String> retires = new java.util.ArrayList<>();
+                int[] c = transactionTemplate.execute(status -> appliquer(infectes, retires));
 
                 journal.setNbRecus(infectes.size());
                 journal.setNbCrees(0);
@@ -95,6 +104,12 @@ public class SynchronisationLitsInfectesService {
                             .append(" lit(s) infecté(s) inconnu(s) : synchronisez d'abord les lits");
                 }
                 message.append(".");
+                if (!retires.isEmpty()) {
+                    message.append(" ATTENTION : ").append(retires.size())
+                            .append(" lit(s) redevenu(s) non infecté(s) : ")
+                            .append(String.join(", ", retires.stream().limit(20).toList()))
+                            .append(retires.size() > 20 ? "…" : "").append(".");
+                }
                 journal.setMessage(message.toString());
             } catch (Exception e) {
                 log.error("Synchronisation de l'infection échouée : {}", e.getMessage(), e);
@@ -136,18 +151,34 @@ public class SynchronisationLitsInfectesService {
         return d;
     }
 
-    private int[] appliquer(Set<String> infectes) {
+    private int[] appliquer(Set<String> infectes, List<String> retires) {
+        List<Lit> lits = litRepository.findBySource(SourceDonnee.EXTERNE).stream()
+                .filter(l -> l.getIdExterne() != null)
+                .toList();
+
+        long infectesActuels = lits.stream().filter(l -> Boolean.TRUE.equals(l.getInfecte())).count();
+        List<Lit> aRetirer = lits.stream()
+                .filter(l -> Boolean.TRUE.equals(l.getInfecte()) && !infectes.contains(l.getIdExterne()))
+                .toList();
+
+        long maxRetraits = Math.max(retraitsAutorises, infectesActuels * seuilRetraitPct / 100);
+        if (aRetirer.size() > maxRetraits) {
+            throw new BusinessException("Synchronisation des lits infectés refusée : " + aRetirer.size()
+                    + " lit(s) sur " + infectesActuels + " redeviendraient non infectés d'un seul coup (limite : "
+                    + maxRetraits + "). Vérifiez la source CUBIX ; aucun lit n'a été modifié.");
+        }
+
         int modifies = 0;
         Set<String> connus = new HashSet<>();
 
-        for (Lit lit : litRepository.findBySource(SourceDonnee.EXTERNE)) {
-            if (lit.getIdExterne() == null) {
-                continue;
-            }
+        for (Lit lit : lits) {
             connus.add(lit.getIdExterne());
 
             boolean doitEtreInfecte = infectes.contains(lit.getIdExterne());
             if (!Objects.equals(lit.getInfecte(), doitEtreInfecte)) {
+                if (Boolean.TRUE.equals(lit.getInfecte()) && !doitEtreInfecte) {
+                    retires.add(lit.getCode() != null ? lit.getCode() : lit.getIdExterne());
+                }
                 lit.setInfecte(doitEtreInfecte);
                 lit.setDateSynchro(LocalDateTime.now());
                 litRepository.save(lit);

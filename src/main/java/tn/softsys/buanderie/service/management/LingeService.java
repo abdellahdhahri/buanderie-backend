@@ -197,7 +197,6 @@ public class LingeService {
         return toDTO(savedLinge);
     }
 
-    // Dans LingeService.java
     @Transactional
     public Linge creer(LingeDTO dto) {
         if (lingeRepository.existsByCodeBarre(dto.getCodebarre())) {

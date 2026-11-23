@@ -15,6 +15,7 @@ import tn.softsys.buanderie.entity.enums.CategLinge;
 import tn.softsys.buanderie.entity.enums.EtatCollecte;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
 import tn.softsys.buanderie.entity.enums.EtatLivraison;
+import tn.softsys.buanderie.entity.enums.TypeOperation;
 import tn.softsys.buanderie.exception.ResourceNotFoundException;
 import tn.softsys.buanderie.repository.CollecteRepository;
 import tn.softsys.buanderie.repository.LingeRepository;
@@ -39,6 +40,7 @@ public class RemiseLingeService {
     private final ServiceRepository serviceRepository;
     private final CollecteResumeService collecteService;
     private final PersonnelReferentielService personnelService;
+    private final tn.softsys.buanderie.repository.HistoriqueLingeRepository historiqueRepo;
 
     @Transactional
     public Map<String, Object> getCollectesNonCloturees(Long personnelId) {
@@ -127,7 +129,7 @@ public class RemiseLingeService {
 
         if (collectes.isEmpty()) {
             throw new RuntimeException(
-                    "Aucune collecte non clôturée de cet agent pour le service " + serviceId + "."
+                    "Aucune collecte non clôturée de cet agent ou de son service d'affectation pour le service " + serviceId + "."
             );
         }
 
@@ -197,12 +199,29 @@ public class RemiseLingeService {
     }
 
     private List<Collecte> collectesNonClotureesAvecReste(Long personnelId) {
-        return collecteRepository
-                .findByPersonnelIdAndEtatCollecteNotOrderByDateCollecteAscIdAsc(
-                        personnelId,
-                        EtatCollecte.CLOTUREE
-                )
+        // Collectes de l'agent + celles de son service d'affectation (saisi dans notre base) (un collègue du même étage peut les récupérer)
+        Map<Long, Collecte> ouvertes = new LinkedHashMap<>();
+        collecteRepository
+                .findByPersonnelIdAndEtatCollecteNotOrderByDateCollecteAscIdAsc(personnelId, EtatCollecte.CLOTUREE)
+                .forEach(c -> ouvertes.put(c.getId(), c));
+
+        Long serviceAffectation = null;
+        try {
+            serviceAffectation = personnelService.getById(personnelId).getServiceAffectationId();
+        } catch (RuntimeException e) {
+            // agent introuvable : on reste sur ses seules collectes
+        }
+        if (serviceAffectation != null) {
+            collecteRepository
+                    .findByServiceAndEtatCollecteNotOrderByDateCollecteAscIdAsc(serviceAffectation, EtatCollecte.CLOTUREE)
+                    .forEach(c -> ouvertes.putIfAbsent(c.getId(), c));
+        }
+
+        return ouvertes.values()
                 .stream()
+                .sorted(Comparator.comparing(Collecte::getDateCollecte,
+                                Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(Collecte::getId))
                 .filter(c -> c.getService() != null)
                 .filter(c -> calculerRestes(c.getId()).values().stream().anyMatch(q -> q > 0))
                 .toList();
@@ -513,6 +532,16 @@ public class RemiseLingeService {
         linge.setEtat(EtatLinge.LIVRE);
         linge.setArsenalEmplacementID(null);
         lingeRepository.save(linge);
+
+        historiqueRepo.save(HistoriqueLinge.builder()
+                .linge(linge)
+                .etatAvant(etatAvant)
+                .etatApres(EtatLinge.LIVRE)
+                .personnelId(remise.getPersonnelId())
+                .typeOperation(TypeOperation.LIVRAISON)
+                .dateOperation(LocalDateTime.now())
+                .observations("Remise des linges n° " + remiseId)
+                .build());
 
         remiseLingeLingeRepository.save(
                 RemiseLingeLinge.builder()

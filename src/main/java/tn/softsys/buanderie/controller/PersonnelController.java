@@ -44,6 +44,13 @@ public class PersonnelController {
         return personnelService.modifier(id, request);
     }
 
+    /** Affecte l'agent à un service (étage…) ; sans serviceId, retire l'affectation. */
+    @PutMapping("/{id}/service-affectation")
+    public Personnel definirServiceAffectation(@PathVariable Long id,
+                                               @RequestParam(required = false) Long serviceId) {
+        return personnelService.definirServiceAffectation(id, serviceId);
+    }
+
     @PutMapping("/{id}/etat")
     public Personnel changerEtat(@PathVariable Long id, @RequestParam boolean actif) {
         return personnelService.changerEtat(id, actif);

@@ -35,6 +35,11 @@ public interface CollecteRepository extends JpaRepository<Collecte, Long> {
             EtatCollecte etatCollecte
     );
 
+    List<Collecte> findByServiceAndEtatCollecteNotOrderByDateCollecteAscIdAsc(
+            Long service,
+            EtatCollecte etatCollecte
+    );
+
     List<Collecte> findByPersonnelIdAndEtatCollecteNotOrderByDateCollecteAscIdAsc(
             Long personnelId,
             EtatCollecte etatCollecte

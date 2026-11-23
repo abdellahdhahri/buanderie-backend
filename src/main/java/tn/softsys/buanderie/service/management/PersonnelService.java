@@ -22,6 +22,7 @@ public class PersonnelService {
 
     private final PersonnelRepository personnelRepository;
     private final IntegrationService integrationService;
+    private final tn.softsys.buanderie.repository.ServiceRepository serviceRepository;
 
     @Transactional(readOnly = true)
     public List<Personnel> getAll(boolean actifsSeulement) {
@@ -92,6 +93,16 @@ public class PersonnelService {
         return personnelRepository.save(personnel);
     }
 
+    @Transactional
+    public Personnel definirServiceAffectation(Long id, Long serviceAffectationId) {
+        Personnel personnel = getById(id);
+        if (serviceAffectationId != null && !serviceRepository.existsById(serviceAffectationId)) {
+            throw new ResourceNotFoundException("Service", serviceAffectationId);
+        }
+        personnel.setServiceAffectationId(serviceAffectationId);
+        return personnelRepository.save(personnel);
+    }
+
     public PersonnelDto versDto(Personnel p) {
         return PersonnelDto.builder()
                 .id(p.getId())
@@ -103,6 +114,7 @@ public class PersonnelService {
                 .fonction(p.getFonction())
                 .fonctionId(p.getFonctionId())
                 .serviceId(p.getServiceId())
+                .serviceAffectationId(p.getServiceAffectationId())
                 .visible(p.getActif())
                 .estMasquer(!Boolean.TRUE.equals(p.getActif()))
                 .build();

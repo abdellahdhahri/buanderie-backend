@@ -39,6 +39,9 @@ public class PersonnelDto {
     @JsonProperty("ServiceID")
     private Long serviceId;
 
+    @JsonProperty("ServiceAffectationID")
+    private Long serviceAffectationId;
+
     @JsonProperty("PointeuseActif")
     private Boolean pointeuseActif;
 
