@@ -62,6 +62,17 @@ public class CollecteChambreController {
     }
 
 
+    @PostMapping("/{collecteId}/linges-chambre")
+    public ResponseEntity<Map<String, Object>> traiterLingesChambre(
+            @PathVariable Long collecteId,
+            @RequestParam String codeContenant,
+            @RequestBody(required = false) List<Long> lingeIds) {
+
+        return ResponseEntity.ok(
+                service.traiterLingesChambre(collecteId, codeContenant, lingeIds));
+    }
+
+
     @PostMapping("/{collecteId}/propre")
     public ResponseEntity<Map<String, Object>> declarerPropre(
             @PathVariable Long collecteId,

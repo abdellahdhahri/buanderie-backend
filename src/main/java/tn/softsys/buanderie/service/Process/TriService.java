@@ -125,15 +125,34 @@ public class TriService {
         }
 
         GroupeLavage groupeLinge = groupeDuLinge(linge);
-        return bacRepository.findByUsage(UsageBac.TRI).stream()
+        List<Bac> compatibles = bacRepository.findByUsage(UsageBac.TRI).stream()
                 .filter(b -> b.getTypeCollecte() == linge.getTypeCollecte())
-                .filter(b -> b.getEtat() == EtatBac.VIDE
-                        || (b.getEtat() == EtatBac.EN_TRI && groupeDuBac(b) == groupeLinge))
-                .sorted(Comparator
-                        .comparing((Bac b) -> b.getEtat() == EtatBac.VIDE ? 1 : 0)
-                        .thenComparing(b -> b.getPoids() == null ? 0.0 : b.getPoids()))
+                .toList();
+
+        // 1. On remplit d'abord le bac déjà ouvert du même groupe de lavage (s'il n'est pas plein) :
+        //    le plus rempli en premier, pour fermer les bacs au plus vite.
+        List<BacDTO> ouverts = compatibles.stream()
+                .filter(b -> b.getEtat() == EtatBac.EN_TRI && groupeDuBac(b) == groupeLinge)
+                .filter(b -> !estPlein(b))
+                .sorted(Comparator.comparing((Bac b) -> b.getPoids() == null ? 0.0 : b.getPoids()).reversed())
                 .map(this::versDto)
                 .toList();
+        if (!ouverts.isEmpty()) {
+            return ouverts;
+        }
+
+        // 2. Aucun bac ouvert compatible : on propose les bacs vides.
+        return compatibles.stream()
+                .filter(b -> b.getEtat() == EtatBac.VIDE)
+                .map(this::versDto)
+                .toList();
+    }
+
+    /** Bac plein : sa capacité maximale (en nombre de linges) est atteinte. Sans capacité, jamais plein. */
+    private boolean estPlein(Bac bac) {
+        Double capacite = bac.getCapacite_max();
+        return capacite != null && capacite > 0
+                && lingeRepository.findByBacId(bac.getId()).size() >= capacite;
     }
 
     private GroupeLavage groupeDuLinge(Linge linge) {

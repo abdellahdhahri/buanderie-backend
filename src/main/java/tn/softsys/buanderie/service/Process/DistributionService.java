@@ -51,9 +51,7 @@ public class DistributionService {
     public Map<String, Object> scanChambrePourDistribution(
             String codeBarre, String matriculeAgent) {
 
-        personnelRepository.findByCodeBarre(matriculeAgent);
-//                .orElseThrow(() -> new ResourceNotFoundException(
-//                        "Agent", "matricule", matriculeAgent));
+        // Le scan d'une chambre est une simple lecture : le matricule de l'agent est facultatif.
 
         ChambreDto chambre = chambreLitService.getChambreByCodeBarre(codeBarre);
         if (chambre == null) {
@@ -93,10 +91,12 @@ public class DistributionService {
 
         List<Map<String, Object>> dansChambre = lingeRepo
                 .findByChambreIdAndEtat(chambre.getId(), EtatLinge.LIVRE).stream()
+                // Seulement les linges posés sur la chambre elle-même (pas ceux d'un lit).
+                .filter(l -> l.getLitId() == null)
                 .map(l -> Map.<String, Object>of(
                         "lingeId",   l.getId(),
-                        "codeBarre", l.getCodeBarre(),
-                        "categorie", l.getCategorie().name()))
+                        "codeBarre", l.getCodeBarre() != null ? l.getCodeBarre() : "",
+                        "categorie", l.getCategorie() != null ? l.getCategorie().name() : ""))
                 .collect(Collectors.toList());
 
         return Map.of(
@@ -482,7 +482,8 @@ public class DistributionService {
     public Map<String, Object> distribuerSurChambre(Long chambreId,
                                                     String codeOuTag,
                                                     String matriculeAgent) {
-        profilExploitationService.exigerNiveau(NiveauRattachement.CHAMBRE);
+        // Pas de contrôle du niveau de rattachement : même quand le linge est rattaché au lit,
+        // certains linges (rideaux, couvertures…) n'ont pas de lit et se posent sur la chambre.
 
         Personnel agent = matriculeAgent == null || matriculeAgent.isBlank()
                 ? null
@@ -529,8 +530,8 @@ public class DistributionService {
 
         return Map.of(
                 "lingeId",   linge.getId(),
-                "codeBarre", linge.getCodeBarre(),
-                "categorie", linge.getCategorie().name(),
+                "codeBarre", linge.getCodeBarre() != null ? linge.getCodeBarre() : "",
+                "categorie", linge.getCategorie() != null ? linge.getCategorie().name() : "",
                 "chambreId", chambreId,
                 "serviceId", serviceId != null ? serviceId : 0L,
                 "statut",    "LIVRE"

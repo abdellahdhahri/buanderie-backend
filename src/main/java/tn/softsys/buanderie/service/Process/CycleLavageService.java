@@ -446,7 +446,10 @@ public class CycleLavageService {
                     .count();
             dechargement.setGroupeLavage(couleur * 2 > linges.size() ? GroupeLavage.COULEUR : GroupeLavage.BLANC);
             dechargement.setEtat(EtatBac.EN_ATTENTE_SECHAGE);
-            dechargement.setPoids(base + poidsTotal);
+            // Les linges n'ont souvent pas de poids unitaire : on reprend le poids chargé du cycle.
+            double poidsLave = poidsTotal > 0 ? poidsTotal
+                    : (cycle.getPoidsCharge() != null ? cycle.getPoidsCharge() : 0.0);
+            dechargement.setPoids(base + poidsLave);
             dechargement.setPoidsBalance(null);
             dechargement.setSource("CYCLE:" + cycle.getId());
             bacRepository.save(dechargement);

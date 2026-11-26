@@ -20,6 +20,7 @@ public class ChargementDTO {
     private EtatBac etatBac;
     private CategLinge categorie;
     private TypeCollecte typeCollecte;
+    private String groupeLavage;
     private int nbLinges;
     private double poidsDeclare;
     private Double poidsBalance;

@@ -29,6 +29,8 @@ import tn.softsys.buanderie.entity.enums.TypeConnecteur;
 @RequiredArgsConstructor
 public class CubixMachineEtatService {
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(CubixMachineEtatService.class);
+
     private final IntegrationService integrationService;
     private final ConnecteurRest connecteur;
     private final CubixMachineImportService importService;
@@ -111,7 +113,14 @@ public class CubixMachineEtatService {
         }
         MultiValueMap<String, String> champs = new LinkedMultiValueMap<>();
         champs.add("id", machine.getIdExterne());
-        connecteur.ecrireFormulaire(importService.baseApi() + "/ArreterMachine", config, champs);
+        // La fin d'un cycle (lavage ou séchage) ne doit pas être bloquée par CUBIX : session
+        // absente après un redémarrage du serveur, jeton expiré, CUBIX injoignable...
+        // Sinon le cycle reste « en cours » et le frontend déconnecte l'agent.
+        try {
+            connecteur.ecrireFormulaire(importService.baseApi() + "/ArreterMachine", config, champs);
+        } catch (RuntimeException e) {
+            LOG.warn("Arrêt de la machine {} non transmis à CUBIX : {}", machine.getCode(), e.getMessage());
+        }
     }
 
     /** La configuration si l'appel à CUBIX s'applique à cette machine, sinon null (machine ou mode interne). */

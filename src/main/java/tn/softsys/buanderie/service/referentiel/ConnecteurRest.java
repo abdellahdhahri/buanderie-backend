@@ -144,7 +144,7 @@ public class ConnecteurRest {
      */
     private String appeler(String url, ConfigurationIntegration config) {
         try {
-            return restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(entetes(config)), String.class).getBody();
+            return restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(entetes(config, url)), String.class).getBody();
         } catch (HttpClientErrorException.Unauthorized e) {
             if (config.getTypeAuthentification() != TypeAuthentification.CUBIX) {
                 throw e;
@@ -174,8 +174,44 @@ public class ConnecteurRest {
         return envoyer(url, config, champs, MediaType.APPLICATION_FORM_URLENCODED);
     }
 
+    /**
+     * Écriture en formulaire SANS jeton : pour ValiderEtape, ouvert comme la stérilisation (l'agent est identifié par
+     * son badge côté CUBIX, qui contrôle son habilitation à l'étape).
+     */
+    public JsonNode ecrireFormulaireSansJeton(String url, MultiValueMap<String, String> champs) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        try {
+            String reponse = restTemplate.exchange(url, HttpMethod.POST, new HttpEntity<>(champs, headers), String.class).getBody();
+            try {
+                return reponse == null || reponse.isBlank() ? objectMapper.createObjectNode() : objectMapper.readTree(reponse);
+            } catch (Exception e) {
+                throw new BusinessException("La réponse de " + url + " n'est pas un JSON valide. Début reçu : " + extrait(reponse));
+            }
+        } catch (HttpStatusCodeException e) {
+            throw erreurCubix(e);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException("Appel de " + url + " impossible : " + e.getMessage());
+        }
+    }
+
+    /** Début d'une réponse non JSON (titre de la page HTML si présent), pour le diagnostic. */
+    private String extrait(String corps) {
+        if (corps == null) {
+            return "(vide)";
+        }
+        java.util.regex.Matcher t = java.util.regex.Pattern
+                .compile("<title>(.*?)</title>", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL)
+                .matcher(corps);
+        String texte = t.find() ? "page « " + t.group(1).trim() + " »" : corps.replaceAll("\\s+", " ").trim();
+        return texte.length() > 200 ? texte.substring(0, 200) + "…" : texte;
+    }
+
     private JsonNode envoyer(String url, ConfigurationIntegration config, Object corps, MediaType typeContenu) {
-        HttpHeaders headers = entetes(config);
+        HttpHeaders headers = entetes(config, url);
         headers.setContentType(typeContenu);
         try {
             String reponse = restTemplate.exchange(url, HttpMethod.POST, new HttpEntity<>(corps, headers), String.class).getBody();
@@ -280,7 +316,7 @@ public class ConnecteurRest {
         return courant;
     }
 
-    private HttpHeaders entetes(ConfigurationIntegration config) {
+    private HttpHeaders entetes(ConfigurationIntegration config, String url) {
         HttpHeaders headers = new HttpHeaders();
         headers.setAccept(List.of(MediaType.APPLICATION_JSON));
 
@@ -308,6 +344,11 @@ public class ConnecteurRest {
                 }
             }
             case CUBIX -> {
+                // Seule BuanderieApi exige le jeton ; les lectures /Importer/ (services, chambres, lits,
+                // lits infectés, personnel) sont ouvertes dans CUBIX et se synchronisent sans session.
+                if (url == null || !url.contains("/BuanderieApi/")) {
+                    break;
+                }
                 String jeton = cubixTokens.jetonCourant();
                 if (jeton == null) {
                     throw new BusinessException("Aucune session CUBIX : connectez-vous avec votre compte CUBIX "

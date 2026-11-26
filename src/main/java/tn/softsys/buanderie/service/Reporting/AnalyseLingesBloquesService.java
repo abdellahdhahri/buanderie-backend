@@ -24,11 +24,7 @@ import tn.softsys.buanderie.exception.BusinessException;
 import tn.softsys.buanderie.repository.LingeBloqueRepository;
 import tn.softsys.buanderie.repository.SeuilEtatLingeRepository;
 
-/**
- * Détection des linges « bloqués » : un linge qui reste trop longtemps dans
- * un état du circuit (réception, lavage, séchage, pliage...) sans avancer.
- * Les durées maximales sont configurables par état (table seuils_etat_linge).
- */
+
 @Slf4j
 @Service
 @RequiredArgsConstructor

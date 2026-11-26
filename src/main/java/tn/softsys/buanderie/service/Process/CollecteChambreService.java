@@ -247,13 +247,7 @@ public class CollecteChambreService {
         }
 
 
-        if (lits.isEmpty()) {
-
-            throw new BusinessException(
-                    "Aucun lit trouvé pour la chambre "
-                            + chambre.getCode()
-            );
-        }
+        // une chambre sans lit reste collectable (linges de chambre)
 
 
         // ========================================================
@@ -468,10 +462,32 @@ public class CollecteChambreService {
 
 
         // ========================================================
+        // LINGES DE CHAMBRE (sans lit) : LIVRE avec chambreId, litId null
+        // ========================================================
+
+        List<Linge> lingesChambre = lingesDeChambre(chambreId);
+
+        Map<String, Object> chambreMap = new LinkedHashMap<>();
+        chambreMap.put("nbLinges", 0);
+        chambreMap.put("linges", new ArrayList<Object>());
+        if (!lingesChambre.isEmpty()) {
+            chambreMap.put("nbLinges", lingesChambre.size());
+            chambreMap.put("actionSuivante", "SCANNER_BAC");
+            chambreMap.put("linges", lingesChambre.stream()
+                    .map(l -> Map.<String, Object>of(
+                            "lingeId", l.getId(),
+                            "codeBarre", s(l.getCodeBarre()),
+                            "rfid", s(l.getRfidTag()),
+                            "categorie", l.getCategorie() != null ? l.getCategorie().name() : "",
+                            "etat", l.getEtat() != null ? l.getEtat().name() : ""))
+                    .collect(Collectors.toList()));
+        }
+
+        // ========================================================
         // AUCUN LINGE DANS LA CHAMBRE
         // ========================================================
 
-        if (litsDto.isEmpty()) {
+        if (litsDto.isEmpty() && lingesChambre.isEmpty()) {
 
             throw new BusinessException(
                     "Aucun linge LIVRE — chambre "
@@ -492,6 +508,7 @@ public class CollecteChambreService {
                                         .intValue()
                         )
                         .sum();
+        nbLinges += lingesChambre.size();
 
         Collecte collecte =
                 collecteRepo.save(
@@ -553,8 +570,119 @@ public class CollecteChambreService {
                 nbLinges,
 
                 "lits",
-                litsDto
+                litsDto,
+
+                "lingesChambre",
+                chambreMap
         );
+    }
+
+    /** Linges LIVRE posés sur la chambre elle-même (sans lit). */
+    private List<Linge> lingesDeChambre(Long chambreId) {
+        List<Linge> l = lingeRepo.findByChambreIdAndEtat(chambreId, EtatLinge.LIVRE);
+        if (l == null) {
+            return Collections.emptyList();
+        }
+        return l.stream().filter(x -> x.getLitId() == null).collect(Collectors.toList());
+    }
+
+    /**
+     * Collecte des linges de chambre (sans lit) : l'agent scanne le bac (ou le sac infecté)
+     * puis les linges ; si lingeIds est vide, tous les linges de chambre restants sont pris.
+     */
+    @Transactional
+    public Map<String, Object> traiterLingesChambre(
+            Long collecteId,
+            String codeContenant,
+            List<Long> lingeIds) {
+
+        Collecte collecte = findC(collecteId);
+
+        if (collecte.getEtatCollecte() != EtatCollecte.EN_TRAITEMENT) {
+            throw new BusinessException("La collecte n'est plus en cours de traitement.");
+        }
+        if (collecte.getChambreId() == null) {
+            throw new BusinessException("La chambre de la collecte est introuvable.");
+        }
+        if (codeContenant == null || codeContenant.isBlank()) {
+            throw new BusinessException("Le code du contenant est obligatoire.");
+        }
+
+        Bac bac = bacRepo.findByCode(codeContenant.trim())
+                .or(() -> bacRepo.findByRfidTag(codeContenant.trim()))
+                .orElseThrow(() -> new BusinessException("Bac introuvable : " + codeContenant));
+
+        boolean infecte = bac.getTypebac() == TypeBac.INFECTE;
+
+        List<Linge> linges = lingesDeChambre(collecte.getChambreId()).stream()
+                .filter(l -> !done(collecteId, l.getId()))
+                .collect(Collectors.toList());
+
+        if (linges.isEmpty()) {
+            throw new BusinessException("Aucun linge de chambre à traiter pour cette collecte.");
+        }
+
+        if (lingeIds != null && !lingeIds.isEmpty()) {
+            Set<Long> attendus = linges.stream().map(Linge::getId).collect(Collectors.toSet());
+            List<Long> nonAttendus = lingeIds.stream()
+                    .filter(id -> !attendus.contains(id)).distinct().collect(Collectors.toList());
+            if (!nonAttendus.isEmpty()) {
+                throw new BusinessException(
+                        "Linges non attendus ou déjà traités pour la chambre : " + nonAttendus);
+            }
+            Set<Long> coches = new HashSet<>(lingeIds);
+            linges = linges.stream().filter(l -> coches.contains(l.getId())).collect(Collectors.toList());
+        }
+
+        int nbActuel = lingeRepo.findByBacId(bac.getId()).size();
+        int capacite = bac.getCapacite_max() != null ? bac.getCapacite_max().intValue() : Integer.MAX_VALUE;
+        int restant = Math.max(0, capacite - nbActuel);
+        if (linges.size() > restant) {
+            throw new BusinessException("Bac " + bac.getCode() + " insuffisant : " + linges.size()
+                    + " linge(s) à mettre, " + restant + " place(s) restante(s). Scannez un autre bac.");
+        }
+
+        EtatLinge nouvelEtat = infecte ? EtatLinge.INFECTE_COLLECTE : EtatLinge.COLLECTE;
+        StatutCollecteLinge statut = infecte ? StatutCollecteLinge.INFECTE_PRESUME : StatutCollecteLinge.BLANC;
+        TypeCollecte typeCollecte = infecte ? TypeCollecte.INFECTE : TypeCollecte.BLANC;
+        Long chambreId = collecte.getChambreId();
+
+        List<String> codes = new ArrayList<>();
+        for (Linge linge : linges) {
+            EtatLinge ancien = linge.getEtat();
+            linge.setBac(bac);
+            linge.setEtat(nouvelEtat);
+            linge.setStatutCollecte(statut);
+            linge.setTypeCollecte(typeCollecte);
+            linge.setLitId(null);
+            linge.setChambreId(null);
+            lingeRepo.save(linge);
+
+            collecteLingeRepo.save(CollecteLinge.builder()
+                    .collecte(collecte).linge(linge).typeCollecte(typeCollecte)
+                    .numeroSacInfecte(infecte ? bac.getCode() : null)
+                    .dateScan(LocalDateTime.now()).build());
+
+            historiqueRepo.save(HistoriqueLinge.builder()
+                    .linge(linge).etatAvant(ancien).etatApres(nouvelEtat)
+                    .personnelId(collecte.getPersonnelId())
+                    .typeOperation(infecte ? TypeOperation.DECLARATION_SAC_INFECTE : TypeOperation.COLLECTE)
+                    .dateOperation(LocalDateTime.now())
+                    .collecte(collecte)
+                    .observations((infecte ? "INFECTE" : "BLANC") + " chambre=" + chambreId
+                            + " (linge de chambre) contenant=" + bac.getCode())
+                    .build());
+
+            codes.add(linge.getCodeBarre());
+        }
+
+        return Map.of(
+                "chambreId", chambreId,
+                "codeContenant", bac.getCode(),
+                "typeContenant", infecte ? "BAC_INFECTE" : "BAC_BLANC",
+                "estInfecte", infecte,
+                "nbTraites", linges.size(),
+                "codes", codes);
     }
 
     @Transactional
@@ -865,9 +993,9 @@ public class CollecteChambreService {
                             .typeOperation(
                                     infecte
                                             ? TypeOperation
-                                              .DECLARATION_SAC_INFECTE
+                                            .DECLARATION_SAC_INFECTE
                                             : TypeOperation
-                                              .COLLECTE
+                                            .COLLECTE
                             )
 
                             .dateOperation(

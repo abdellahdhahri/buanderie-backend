@@ -20,7 +20,8 @@ public class DistributionController {
     @GetMapping("/api/distribution/chambre")
     public ResponseEntity<Map<String, Object>> scanChambre(
             @RequestParam String codeBarre,
-            @RequestParam String matriculeAgent) {
+            // Lecture seule : le badge n'est pas exigé pour consulter une chambre.
+            @RequestParam(required = false) String matriculeAgent) {
         return ResponseEntity.ok(
                 distributionService.scanChambrePourDistribution(codeBarre, matriculeAgent));
     }

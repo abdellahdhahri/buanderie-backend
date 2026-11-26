@@ -24,6 +24,7 @@ import tn.softsys.buanderie.entity.enums.CategLinge;
 import tn.softsys.buanderie.entity.enums.CodeEtape;
 import tn.softsys.buanderie.entity.enums.EtatBac;
 import tn.softsys.buanderie.entity.enums.EtatLinge;
+import tn.softsys.buanderie.entity.enums.GroupeLavage;
 import tn.softsys.buanderie.entity.enums.TypeOperation;
 import tn.softsys.buanderie.entity.enums.UsageBac;
 import tn.softsys.buanderie.exception.BusinessException;
@@ -294,6 +295,16 @@ public class ChargementService {
         return dominante;
     }
 
+    private String groupeDuBac(Bac bac, List<Linge> linges) {
+        if (bac.getGroupeLavage() != null) return bac.getGroupeLavage().name();
+        if (linges.isEmpty()) return null;
+        long couleur = linges.stream()
+                .filter(l -> (l.getGroupeLavage() != null ? l.getGroupeLavage()
+                        : GroupeLavage.depuisDesignation(l.getDesignation())) == GroupeLavage.COULEUR)
+                .count();
+        return (couleur * 2 > linges.size() ? GroupeLavage.COULEUR : GroupeLavage.BLANC).name();
+    }
+
     private void historiser(Linge linge, EtatLinge avant, EtatLinge apres, Long personnelId, String observation) {
         historiqueLingeRepository.save(HistoriqueLinge.builder()
                 .linge(linge)
@@ -316,6 +327,11 @@ public class ChargementService {
             codes.add(linge.getCodeBarre());
         }
 
+        // Les linges synchronisés n'ont souvent pas de poids : on retombe sur le poids du bac.
+        if (declare <= 0 && bac.getPoids() != null) {
+            declare = bac.getPoids();
+        }
+
         Double ecart = null;
         Double balance = bac.getPoidsBalance();
         if (balance != null && declare > 0) {
@@ -331,6 +347,7 @@ public class ChargementService {
                 .etatBac(bac.getEtat())
                 .categorie(bac.getCategorie())
                 .typeCollecte(bac.getTypeCollecte())
+                .groupeLavage(groupeDuBac(bac, linges))
                 .nbLinges(linges.size())
                 .poidsDeclare(Math.round(declare * 10.0) / 10.0)
                 .poidsBalance(balance)

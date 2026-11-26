@@ -20,6 +20,7 @@ public class SynchronisationScheduler {
 
     private final IntegrationService integrationService;
     private final SynchronisationService synchronisationService;
+    private final tn.softsys.buanderie.security.CubixTokenStore cubixTokens;
 
     @Scheduled(fixedDelay = 60000, initialDelay = 30000)
     public void verifierSynchronisations() {
@@ -29,13 +30,16 @@ public class SynchronisationScheduler {
                 return;
             }
 
-            if (config.getTypeAuthentification() == TypeAuthentification.CUBIX) {
-                return;
-            }
+            boolean cubix = config.getTypeAuthentification() == TypeAuthentification.CUBIX;
             int frequence = config.getFrequenceMinutes() == null ? 60 : config.getFrequenceMinutes();
 
             for (EndpointIntegration endpoint : integrationService.getEndpoints()) {
                 if (!Boolean.TRUE.equals(endpoint.getActif()) || !endpoint.getReferentiel().isSynchronisationDisponible()) {
+                    continue;
+                }
+                // CUBIX : les référentiels /Importer/ sont ouverts ; ceux de BuanderieApi exigent une session
+                if (cubix && integrationService.urlComplete(endpoint.getReferentiel()).contains("/BuanderieApi/")
+                        && cubixTokens.jetonCourant() == null) {
                     continue;
                 }
                 boolean due = endpoint.getDerniereSynchro() == null
